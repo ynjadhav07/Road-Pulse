@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>RoadPulse Live Anomaly Heatmap</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html, body, #map { height: 100%; margin: 0; padding: 0; font-family: sans-serif; }
+    .legend-box {
+      position: absolute; top: 15px; right: 15px; background: rgba(15, 23, 42, 0.9);
+      color: #f8fafc; padding: 14px 18px; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      z-index: 1000; font-size: 13px; line-height: 1.6; border: 1px solid #334155;
+    }
+    .circle-sample { height: 12px; width: 12px; border-radius: 50%; display: inline-block; margin-right: 8px; vertical-align: middle; }
+    .red { background-color: rgba(239, 68, 68, 0.85); }
+    .orange { background-color: rgba(249, 115, 22, 0.85); }
+    .yellow { background-color: rgba(234, 179, 8, 0.85); }
+    #status { font-weight: bold; color: #38bdf8; margin-top: 5px; }
+  </style>
+</head>
+<body>
+
+  <div class="legend-box">
+    <b>Road Anomaly Clusters</b><br/>
+    <span class="circle-sample red"></span> High Severity (Red)<br/>
+    <span class="circle-sample orange"></span> Medium Severity (Orange)<br/>
+    <span class="circle-sample yellow"></span> Low Severity (Yellow)<br/>
+    <hr style="border: 0; border-top: 1px solid #334155; margin: 8px 0;"/>
+    <small style="color: #94a3b8;">*Circles grow as repeat hits occur</small>
+    <div id="status">Connecting to Sheet...</div>
+  </div>
+
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <script>
+    const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvD2getclUw9lsCQXftP9oH4vFP8Yx9cEJe91JDXxq5p0Pz05WTGUFogtAbs5fpaW8Yj8gdIMOCrk4/pub?gid=0&single=true&output=csv";
+
+    // Initialize Leaflet Map (Free OSM / CartoDB tiles, no token needed)
+    const map = L.map('map').setView([18.5204, 73.8567], 13);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
+    }).addTo(map);
+
+    const layerGroup = L.layerGroup().addTo(map);
+    let autoZoomed = false;
+
+    function getColorRGB(severity) {
+      const s = (severity || "").toUpperCase().trim();
+      if (s === "RED") return "239, 68, 68";
+      if (s === "ORANGE") return "249, 115, 22";
+      return "234, 179, 8";
+    }
+
+    function refreshMapData() {
+      const fetchUrl = CSV_URL + '&nocache=' + new Date().getTime();
+
+      Papa.parse(fetchUrl, {
+        download: true,
+        header: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+          const rows = results.data;
+          if (!rows || rows.length === 0) {
+            document.getElementById('status').innerText = "Sheet empty.";
+            return;
+          }
+
+          layerGroup.clearLayers();
+          const clusters = {};
+          const bounds = [];
+
+          // Group nearby coordinates into ~10m buckets (4 decimal precision)
+          rows.forEach(r => {
+            const lat = parseFloat(r.Latitude);
+            const lng = parseFloat(r.Longitude);
+
+            if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+              const clusterKey = lat.toFixed(4) + "_" + lng.toFixed(4);
+              if (!clusters[clusterKey]) {
+                clusters[clusterKey] = {
+                  lat: lat,
+                  lng: lng,
+                  count: 0,
+                  maxG: 0,
+                  severity: r.Severity || "YELLOW",
+                  type: r.Type || "POTHOLE"
+                };
+              }
+              clusters[clusterKey].count += 1;
+              const gVal = parseFloat(r.G_Force) || 0;
+              if (gVal > clusters[clusterKey].maxG) {
+                clusters[clusterKey].maxG = gVal;
+                clusters[clusterKey].severity = r.Severity || "YELLOW";
+                clusters[clusterKey].type = r.Type || "POTHOLE";
+              }
+            }
+          });
+
+          // Render self-growing translucent circles
+          Object.values(clusters).forEach(item => {
+            const rgb = getColorRGB(item.severity);
+            
+            // Starts at 7m radius, expands +4m per additional hit
+            const radiusMeters = 7 + (item.count - 1) * 4; 
+            const fillAlpha = Math.min(0.35 + (item.count * 0.08), 0.85);
+
+            const circle = L.circle([item.lat, item.lng], {
+              radius: radiusMeters,
+              color: `rgba(${rgb}, 0.9)`,
+              weight: 1.5,
+              fillColor: `rgba(${rgb}, ${fillAlpha})`,
+              fillOpacity: fillAlpha
+            });
+
+            circle.bindPopup(`
+              <div style="font-size: 13px; line-height: 1.5;">
+                <b style="color: #0f172a; font-size: 14px;">${item.type}</b><br/>
+                <b>Total Reports:</b> ${item.count}<br/>
+                <b>Peak Impact:</b> ${item.maxG.toFixed(2)} g<br/>
+                <b>Severity:</b> ${item.severity}
+              </div>
+            `);
+
+            circle.addTo(layerGroup);
+            bounds.push([item.lat, item.lng]);
+          });
+
+          // Focus viewport automatically onto points on first load
+          if (!autoZoomed && bounds.length > 0) {
+            map.fitBounds(bounds, { padding: [40, 40] });
+            autoZoomed = true;
+          }
+
+          document.getElementById('status').innerText = `Synced (${Object.keys(clusters).length} clusters detected)`;
+        }
+      });
+    }
+
+    refreshMapData();
+    setInterval(refreshMapData, 4000);
+  </script>
+</body>
+</html>

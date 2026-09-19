@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RoadPulse Background Tracker</title>
+  <style>
+    body { font-family: sans-serif; margin: 20px; background: #0f172a; color: #f8fafc; text-align: center; }
+    .card { background: #1e293b; padding: 20px; border-radius: 12px; margin-top: 15px; border: 1px solid #334155; }
+    .val { font-size: 22px; font-weight: bold; color: #38bdf8; font-family: monospace; }
+    #badge { display: inline-block; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: bold; margin-bottom: 12px; background: #f59e0b; color: #000; }
+    #tap-btn { width: 100%; padding: 18px; font-size: 18px; border-radius: 10px; border: none; background: #22c55e; color: #000; font-weight: 800; cursor: pointer; letter-spacing: 1px; }
+    #tap-btn.active { background: #334155; color: #94a3b8; pointer-events: none; }
+    #log { margin-top: 20px; font-size: 12px; text-align: left; background: #020617; padding: 12px; border-radius: 8px; height: 160px; overflow-y: scroll; border: 1px solid #1e293b; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <div id="badge">IDLE (SCREEN WILL SLEEP)</div>
+  <button id="tap-btn" onclick="startOneTap()">1-TAP START (PERSISTENT)</button>
+
+  <div class="card">
+    <div style="margin-bottom: 10px;">LAT: <span id="lat" class="val">--.------</span></div>
+    <div>LNG: <span id="lng" class="val">--.------</span></div>
+  </div>
+
+  <div id="log">Tap start to lock screen wake & enable background execution.</div>
+
+  <script>
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxovS5SKTpxjeOnrPMhGAGIfKIqji3a4TSxt7Sf7KrI-f7Aueh3tEPk6GcuOUwV9R-T/exec";
+    const BLYNK_AUTH_TOKEN = "k53JqlD8pCz-0Z_ixoqYMSyMgkMVN-pw";
+
+    let curLat = 0, curLng = 0;
+    let lastProcessedVal = "";
+    let wakeLock = null;
+    let audioCtx = null;
+
+    function log(msg) {
+      const el = document.getElementById("log");
+      el.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}<br/>` + el.innerHTML;
+    }
+
+    // Prevents Android from killing Chrome thread in background
+    function startBackgroundAudioLoop() {
+      try {
+        window.AudioContext = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContext();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        gain.gain.value = 0.0001; // Inaudible
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        log("Background thread lock active.");
+      } catch (e) {
+        log("Audio Context Error: " + e.message);
+      }
+    }
+
+    // Prevents screen timeout while phone is mounted
+    async function requestWakeLock() {
+      if ('wakeLock' in navigator) {
+        try {
+          wakeLock = await navigator.wakeLock.request('screen');
+          log("Wake Lock acquired: Screen will not dim.");
+          wakeLock.addEventListener('release', () => {
+            log("Wake Lock released.");
+          });
+        } catch (err) {
+          log(`Wake Lock Error: ${err.message}`);
+        }
+      }
+    }
+
+    // Re-acquire wake lock if tab becomes visible again
+    document.addEventListener('visibilitychange', async () => {
+      if (wakeLock !== null && document.visibilityState === 'visible') {
+        await requestWakeLock();
+      }
+    });
+
+    function startOneTap() {
+      const btn = document.getElementById("tap-btn");
+      const badge = document.getElementById("badge");
+      btn.innerText = "ACTIVE & TRACKING";
+      btn.classList.add("active");
+      badge.style.background = "#22c55e";
+      badge.innerText = "ONLINE - PERSISTENT";
+
+      startBackgroundAudioLoop();
+      requestWakeLock();
+
+      if (!navigator.geolocation) {
+        log("Geolocation unsupported.");
+        return;
+      }
+
+      navigator.geolocation.watchPosition(
+        (pos) => {
+          curLat = pos.coords.latitude;
+          curLng = pos.coords.longitude;
+          document.getElementById("lat").innerText = curLat.toFixed(6);
+          document.getElementById("lng").innerText = curLng.toFixed(6);
+        },
+        (err) => log("GPS Warn: " + err.message),
+        { enableHighAccuracy: true, maximumAge: 500, timeout: 10000 }
+      );
+
+      setInterval(pollBlynk, 1200);
+      log("Blynk polling active.");
+    }
+
+    async function pollBlynk() {
+      if (curLat === 0 && curLng === 0) return;
+
+      try {
+        const res = await fetch(`https://blynk.cloud/external/api/get?token=${BLYNK_AUTH_TOKEN}&v1&v2&v3`);
+        const json = await res.json();
+
+        const type = json.v1 || "";
+        const severity = json.v2 || "YELLOW";
+        const gforce = json.v3 || 0;
+        const uniqueCheck = `${type}_${gforce}`;
+
+        if (type !== "" && uniqueCheck !== lastProcessedVal) {
+          lastProcessedVal = uniqueCheck;
+          log(`DETECTED: ${type} (${gforce}g) -> Sending Sheet...`);
+
+          await fetch(WEB_APP_URL, {
+            method: "POST",
+            mode: "no-cors",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: type,
+              color: severity,
+              gforce: gforce,
+              lat: curLat,
+              lng: curLng
+            })
+          });
+          log("Logged to Google Sheet!");
+        }
+      } catch (e) {
+        // Idle
+      }
+    }
+  </script>
+</body>
+</html>
