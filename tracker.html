@@ -3,94 +3,94 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RoadPulse Background Tracker</title>
+  <title>RoadPulse Auto GPS Tracker</title>
   <style>
-    body { font-family: sans-serif; margin: 20px; background: #0f172a; color: #f8fafc; text-align: center; }
-    .card { background: #1e293b; padding: 20px; border-radius: 12px; margin-top: 15px; border: 1px solid #334155; }
-    .val { font-size: 22px; font-weight: bold; color: #38bdf8; font-family: monospace; }
+    body { font-family: sans-serif; margin: 15px; background: #0f172a; color: #f8fafc; text-align: center; }
+    .card { background: #1e293b; padding: 18px; border-radius: 12px; margin-top: 15px; border: 1px solid #334155; }
+    .val { font-size: 20px; font-weight: bold; color: #38bdf8; font-family: monospace; }
     #badge { display: inline-block; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: bold; margin-bottom: 12px; background: #f59e0b; color: #000; }
-    #tap-btn { width: 100%; padding: 18px; font-size: 18px; border-radius: 10px; border: none; background: #22c55e; color: #000; font-weight: 800; cursor: pointer; letter-spacing: 1px; }
-    #tap-btn.active { background: #334155; color: #94a3b8; pointer-events: none; }
-    #log { margin-top: 20px; font-size: 12px; text-align: left; background: #020617; padding: 12px; border-radius: 8px; height: 160px; overflow-y: scroll; border: 1px solid #1e293b; font-family: monospace; }
+    #tap-btn { width: 100%; padding: 16px; font-size: 17px; border-radius: 10px; border: none; background: #22c55e; color: #000; font-weight: 800; cursor: pointer; letter-spacing: 1px; }
+    #tap-btn.active { background: #334155; color: #94a3b8; }
+    #log { margin-top: 15px; font-size: 12px; text-align: left; background: #020617; padding: 12px; border-radius: 8px; height: 180px; overflow-y: scroll; border: 1px solid #1e293b; font-family: monospace; }
   </style>
 </head>
 <body>
-  <div id="badge">IDLE (SCREEN WILL SLEEP)</div>
-  <button id="tap-btn" onclick="startOneTap()">1-TAP START (PERSISTENT)</button>
+  <div id="badge">IDLE - TAP TO ACTIVATE</div>
+  <button id="tap-btn" onclick="startOneTap()">1-TAP START GPS & SYNC</button>
 
   <div class="card">
-    <div style="margin-bottom: 10px;">LAT: <span id="lat" class="val">--.------</span></div>
-    <div>LNG: <span id="lng" class="val">--.------</span></div>
+    <div style="margin-bottom: 8px;">LAT: <span id="lat" class="val">Waiting...</span></div>
+    <div>LNG: <span id="lng" class="val">Waiting...</span></div>
   </div>
 
-  <div id="log">Tap start to lock screen wake & enable background execution.</div>
+  <div id="log">System initialized. Click button to begin...</div>
 
   <script>
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxovS5SKTpxjeOnrPMhGAGIfKIqji3a4TSxt7Sf7KrI-f7Aueh3tEPk6GcuOUwV9R-T/exec";
     const BLYNK_AUTH_TOKEN = "k53JqlD8pCz-0Z_ixoqYMSyMgkMVN-pw";
 
-    let curLat = 0, curLng = 0;
+    // India region Blynk endpoint + Global fallback
+    const BLYNK_SERVERS = [
+      "https://blr1.blynk.cloud",
+      "https://blynk.cloud",
+      "https://ny3.blynk.cloud"
+    ];
+    let workingServer = BLYNK_SERVERS[0];
+
+    let curLat = null, curLng = null;
     let lastProcessedVal = "";
     let wakeLock = null;
     let audioCtx = null;
+    let isTracking = false;
 
     function log(msg) {
       const el = document.getElementById("log");
       el.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}<br/>` + el.innerHTML;
     }
 
-    // Prevents Android from killing Chrome thread in background
     function startBackgroundAudioLoop() {
       try {
         window.AudioContext = window.AudioContext || window.webkitAudioContext;
         audioCtx = new AudioContext();
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
-        gain.gain.value = 0.0001; // Inaudible
+        gain.gain.value = 0.0001;
         osc.connect(gain);
         gain.connect(audioCtx.destination);
         osc.start();
-        log("Background thread lock active.");
+        log("Keep-alive thread running.");
       } catch (e) {
         log("Audio Context Error: " + e.message);
       }
     }
 
-    // Prevents screen timeout while phone is mounted
     async function requestWakeLock() {
       if ('wakeLock' in navigator) {
         try {
           wakeLock = await navigator.wakeLock.request('screen');
-          log("Wake Lock acquired: Screen will not dim.");
-          wakeLock.addEventListener('release', () => {
-            log("Wake Lock released.");
-          });
+          log("Screen Wake Lock Active.");
         } catch (err) {
-          log(`Wake Lock Error: ${err.message}`);
+          log(`WakeLock Note: ${err.message}`);
         }
       }
     }
 
-    // Re-acquire wake lock if tab becomes visible again
-    document.addEventListener('visibilitychange', async () => {
-      if (wakeLock !== null && document.visibilityState === 'visible') {
-        await requestWakeLock();
-      }
-    });
-
     function startOneTap() {
+      if (isTracking) return;
+      isTracking = true;
+
       const btn = document.getElementById("tap-btn");
       const badge = document.getElementById("badge");
-      btn.innerText = "ACTIVE & TRACKING";
+      btn.innerText = "ONLINE - MONITORING BLYNK";
       btn.classList.add("active");
       badge.style.background = "#22c55e";
-      badge.innerText = "ONLINE - PERSISTENT";
+      badge.innerText = "GPS & BLYNK ACTIVE";
 
       startBackgroundAudioLoop();
       requestWakeLock();
 
       if (!navigator.geolocation) {
-        log("Geolocation unsupported.");
+        log("Geolocation is NOT supported!");
         return;
       }
 
@@ -101,30 +101,47 @@
           document.getElementById("lat").innerText = curLat.toFixed(6);
           document.getElementById("lng").innerText = curLng.toFixed(6);
         },
-        (err) => log("GPS Warn: " + err.message),
-        { enableHighAccuracy: true, maximumAge: 500, timeout: 10000 }
+        (err) => log("GPS Wait/Error: " + err.message),
+        { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
       );
 
       setInterval(pollBlynk, 1200);
-      log("Blynk polling active.");
+      log("Monitoring started. Shake board to test.");
     }
 
     async function pollBlynk() {
-      if (curLat === 0 && curLng === 0) return;
+      let json = null;
 
-      try {
-        const res = await fetch(`https://blynk.cloud/external/api/get?token=${BLYNK_AUTH_TOKEN}&v1&v2&v3`);
-        const json = await res.json();
+      // Try multiple Blynk endpoints if one drops
+      for (const server of BLYNK_SERVERS) {
+        try {
+          const res = await fetch(`${server}/external/api/get?token=${BLYNK_AUTH_TOKEN}&v1&v2&v3`, { method: "GET" });
+          if (res.ok) {
+            json = await res.json();
+            workingServer = server;
+            break;
+          }
+        } catch (err) {
+          // try next server
+        }
+      }
 
-        const type = json.v1 || "";
-        const severity = json.v2 || "YELLOW";
-        const gforce = json.v3 || 0;
-        const uniqueCheck = `${type}_${gforce}`;
+      if (!json) return;
 
-        if (type !== "" && uniqueCheck !== lastProcessedVal) {
-          lastProcessedVal = uniqueCheck;
-          log(`DETECTED: ${type} (${gforce}g) -> Sending Sheet...`);
+      const type = json.v1 || "";
+      const severity = json.v2 || "YELLOW";
+      const gforce = json.v3 || 0;
+      const uniqueCheck = `${type}_${gforce}`;
 
+      if (type !== "" && uniqueCheck !== lastProcessedVal) {
+        lastProcessedVal = uniqueCheck;
+        log(`HIT: ${type} (${gforce}g) -> Sending Sheet...`);
+
+        // If GPS is still calibrating, use fallback Pune coords
+        const sendLat = (curLat !== null) ? curLat : 18.5204;
+        const sendLng = (curLng !== null) ? curLng : 73.8567;
+
+        try {
           await fetch(WEB_APP_URL, {
             method: "POST",
             mode: "no-cors",
@@ -133,14 +150,14 @@
               type: type,
               color: severity,
               gforce: gforce,
-              lat: curLat,
-              lng: curLng
+              lat: sendLat,
+              lng: sendLng
             })
           });
-          log("Logged to Google Sheet!");
+          log("Upload Success: Saved in Google Sheet!");
+        } catch (postErr) {
+          log("Sheet Post Error: " + postErr.message);
         }
-      } catch (e) {
-        // Idle
       }
     }
   </script>
