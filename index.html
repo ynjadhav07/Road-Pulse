@@ -3,600 +3,447 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-  <title>RoadPulse — Road Surface Intelligence</title>
+  <title>RoadPulse — Road Surface Monitor</title>
+  
+  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
   <style>
     * {
-      box-sizing: border-box;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-    }
-
-    html, body, #map {
-      height: 100%;
       margin: 0;
       padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
-      background-color: #f5f5f7;
-      color: #1d1d1f;
+      box-sizing: border-box;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body, html, #map {
+      width: 100%;
+      height: 100%;
+      background-color: #f2f2f7;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
       overflow: hidden;
     }
 
     
-    .glass-island {
+    .ios-card {
       position: absolute;
-      top: 18px;
-      left: 16px;
-      right: 16px;
-      max-width: 410px;
+      top: 16px;
+      left: 14px;
+      right: 14px;
+      max-width: 390px;
       margin: 0 auto;
-      background: rgba(255, 255, 255, 0.72);
-      backdrop-filter: blur(28px) saturate(190%);
-      -webkit-backdrop-filter: blur(28px) saturate(190%);
-      border: 1px solid rgba(255, 255, 255, 0.85);
-      border-radius: 26px;
-      padding: 18px 20px;
-      box-shadow: 
-        0 20px 40px rgba(0, 0, 0, 0.08),
-        0 1px 3px rgba(0, 0, 0, 0.04),
-        inset 0 1px 1px rgba(255, 255, 255, 0.9);
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      border-radius: 20px;
+      padding: 16px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
       z-index: 1000;
-      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
     }
 
-    .glass-island.minimized {
-      padding: 10px 18px;
-      width: fit-content;
-      cursor: pointer;
-      background: rgba(255, 255, 255, 0.82);
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
-    }
-
-    .glass-island.minimized .expandable-content {
-      display: none !important;
-    }
-
-    /* --- HEADER SECTION --- */
-    .island-header {
+    .card-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
 
-    .brand-title {
+    .title {
       font-size: 15px;
-      font-weight: 600;
-      letter-spacing: -0.015em;
-      color: #1d1d1f;
-      display: flex;
-      align-items: center;
-      gap: 7px;
+      font-weight: 700;
+      color: #1c1c1e;
+      letter-spacing: -0.2px;
     }
 
-    .brand-title svg {
-      width: 17px;
-      height: 17px;
-      fill: none;
-      stroke: #0071e3;
-      stroke-width: 2.2;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-
-    .system-pill {
+    .badge {
       font-size: 11px;
       font-weight: 600;
-      letter-spacing: 0.02em;
-      padding: 4px 10px;
-      border-radius: 980px;
-      background: rgba(0, 0, 0, 0.05);
-      color: #86868b;
-      transition: all 0.3s ease;
+      padding: 3px 9px;
+      border-radius: 12px;
+      background: #e5e5ea;
+      color: #3a3a3c;
     }
 
-    .system-pill.online {
-      background: rgba(52, 199, 89, 0.15);
-      color: #248a3d;
+    .badge.active {
+      background: #e1f5fe;
+      color: #0288d1;
     }
 
-    .system-pill.recording {
-      background: rgba(255, 59, 48, 0.15);
-      color: #d70015;
-      animation: pulse-badge 1.4s infinite;
+    .badge.recording {
+      background: #ffebee;
+      color: #d32f2f;
     }
 
-    @keyframes pulse-badge {
-      0% { opacity: 0.7; transform: scale(0.98); }
-      50% { opacity: 1; transform: scale(1.02); }
-      100% { opacity: 0.7; transform: scale(0.98); }
-    }
-
-   
-    .primary-cta {
+    
+    .btn-action {
       width: 100%;
-      padding: 13px 18px;
-      margin-top: 14px;
+      margin-top: 12px;
+      padding: 12px;
       font-size: 14px;
       font-weight: 600;
-      letter-spacing: -0.01em;
-      border-radius: 14px;
       border: none;
-      background: #0071e3;
+      border-radius: 12px;
+      background: #007aff;
       color: #ffffff;
       cursor: pointer;
-      box-shadow: 0 4px 14px rgba(0, 113, 227, 0.3);
-      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      gap: 8px;
+      transition: opacity 0.2s;
     }
 
-    .primary-cta:active {
-      transform: scale(0.97);
-      background: #0062c4;
+    .btn-action:active {
+      opacity: 0.7;
     }
 
-    .primary-cta.stop {
+    .btn-action.stop {
       background: #ff3b30;
-      box-shadow: 0 4px 14px rgba(255, 59, 48, 0.3);
     }
 
-    .primary-cta.stop:active {
-      background: #d70015;
-    }
-
-    /* --- TELEMETRY READOUT CARDS --- */
-    .telemetry-grid {
+    /* Telemetry Info Grid */
+    .stats-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-      margin-top: 14px;
+      gap: 6px;
+      margin-top: 12px;
     }
 
-    .telemetry-card {
-      background: rgba(255, 255, 255, 0.55);
-      border: 1px solid rgba(255, 255, 255, 0.9);
-      border-radius: 14px;
-      padding: 9px 8px;
+    .stat-box {
+      background: #f2f2f7;
+      border-radius: 10px;
+      padding: 8px 4px;
       text-align: center;
     }
 
-    .telemetry-label {
+    .stat-label {
       font-size: 10px;
       font-weight: 600;
-      letter-spacing: 0.04em;
-      color: #86868b;
+      color: #8e8e93;
       text-transform: uppercase;
     }
 
-    .telemetry-value {
-      font-size: 13px;
-      font-weight: 600;
-      color: #1d1d1f;
+    .stat-val {
+      font-size: 12px;
+      font-weight: 700;
+      color: #1c1c1e;
       margin-top: 2px;
-      font-feature-settings: "tnum";
-      font-variant-numeric: tabular-nums;
     }
 
-    /* --- STATUS TERMINAL FEED --- */
-    .terminal-feed {
-      margin-top: 12px;
-      font-size: 11.5px;
-      color: #424245;
-      background: rgba(0, 0, 0, 0.03);
-      padding: 8px 12px;
-      border-radius: 10px;
+    .status-text {
+      margin-top: 10px;
+      font-size: 12px;
+      color: #3a3a3c;
+      text-align: center;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
-    /* --- LEGEND CAPSULES --- */
-    .legend-row {
+    .legend-bar {
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-top: 14px;
-      padding-top: 12px;
-      border-top: 1px solid rgba(0, 0, 0, 0.06);
+      justify-content: space-around;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #e5e5ea;
       font-size: 11px;
-      color: #86868b;
-      font-weight: 500;
+      color: #636366;
     }
 
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-
-    .indicator-orb {
-      width: 7px;
-      height: 7px;
+    .dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
       border-radius: 50%;
+      margin-right: 4px;
     }
 
-    .orb-red { background: #ff3b30; box-shadow: 0 0 6px rgba(255, 59, 48, 0.5); }
-    .orb-orange { background: #ff9500; box-shadow: 0 0 6px rgba(255, 149, 0, 0.5); }
-    .orb-yellow { background: #ffcc00; box-shadow: 0 0 6px rgba(255, 204, 0, 0.5); }
-
-   
-    .leaflet-popup-content-wrapper {
-      background: rgba(255, 255, 255, 0.88) !important;
-      backdrop-filter: blur(20px) !important;
-      -webkit-backdrop-filter: blur(20px) !important;
-      border-radius: 18px !important;
-      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12) !important;
-      border: 1px solid rgba(255, 255, 255, 0.95);
-      color: #1d1d1f !important;
-      padding: 6px 4px;
-    }
-    .leaflet-popup-tip {
-      background: rgba(255, 255, 255, 0.88) !important;
-    }
+    .dot.red { background: #ff3b30; }
+    .dot.orange { background: #ff9500; }
+    .dot.yellow { background: #ffcc00; }
   </style>
 </head>
 <body>
 
-  <audio id="playback-anchor" loop playsinline style="display:none;">
-    <source src="https://raw.githubusercontent.com/anars/blank-audio/master/10-minutes-of-silence.mp3" type="audio/mp3">
-  </audio>
-
-  <div id="island-widget" class="glass-island" onclick="expandIsland()">
-    <div class="island-header">
-      <div class="brand-title">
-        <svg viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-        RoadPulse
-      </div>
-      <span id="system-badge" class="system-pill">STANDBY</span>
+  <div class="ios-card">
+    <div class="card-header">
+      <div class="title">RoadPulse Telemetry</div>
+      <span id="ui-badge" class="badge">VIEWER</span>
     </div>
 
-    <button id="session-button" class="primary-cta expandable-content" onclick="event.stopPropagation(); toggleMonitoringSession()">
-      Start Telemetry Tracking
+    <button id="ui-btn" class="btn-action" onclick="toggleLogger()">
+      Start Telemetry Logging
     </button>
 
-    <div class="telemetry-grid expandable-content">
-      <div class="telemetry-card">
-        <div class="telemetry-label">Latitude</div>
-        <div id="metric-lat" class="telemetry-value">--.----</div>
+    <div class="stats-grid">
+      <div class="stat-box">
+        <div class="stat-label">Lat</div>
+        <div id="stat-lat" class="stat-val">--.----</div>
       </div>
-      <div class="telemetry-card">
-        <div class="telemetry-label">Longitude</div>
-        <div id="metric-lng" class="telemetry-value">--.----</div>
+      <div class="stat-box">
+        <div class="stat-label">Lng</div>
+        <div id="stat-lng" class="stat-val">--.----</div>
       </div>
-      <div class="telemetry-card">
-        <div class="telemetry-label">Hazards</div>
-        <div id="metric-clusters" class="telemetry-value">--</div>
+      <div class="stat-box">
+        <div class="stat-label">Spots</div>
+        <div id="stat-spots" class="stat-val">0</div>
       </div>
     </div>
 
-    <div id="status-terminal" class="terminal-feed expandable-content">Ready. Tap to initiate session.</div>
+    <div id="ui-status" class="status-text">Public map active. Tap circle for data.</div>
 
-    <div class="legend-row expandable-content">
-      <div class="legend-item"><span class="indicator-orb orb-red"></span>Severe</div>
-      <div class="legend-item"><span class="indicator-orb orb-orange"></span>Moderate</div>
-      <div class="legend-item"><span class="indicator-orb orb-yellow"></span>Minor</div>
-      <span>Spatial Grid</span>
+    <div class="legend-bar">
+      <span><span class="dot red"></span>Severe</span>
+      <span><span class="dot orange"></span>Moderate</span>
+      <span><span class="dot yellow"></span>Minor</span>
     </div>
   </div>
 
   <div id="map"></div>
 
+  <!-- Leaflet & PapaParse -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
   <script>
-    const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxovS5SKTpxjeOnrPMhGAGIfKIqji3a4TSxt7Sf7KrI-f7Aueh3tEPk6GcuOUwV9R-T/exec";
-    const DATABASE_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvD2getclUw9lsCQXftP9oH4vFP8Yx9cEJe91JDXxq5p0Pz05WTGUFogtAbs5fpaW8Yj8gdIMOCrk4/pub?output=csv";
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxovS5SKTpxjeOnrPMhGAGIfKIqji3a4TSxt7Sf7KrI-f7Aueh3tEPk6GcuOUwV9R-T/exec";
+    const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvD2getclUw9lsCQXftP9oH4vFP8Yx9cEJe91JDXxq5p0Pz05WTGUFogtAbs5fpaW8Yj8gdIMOCrk4/pub?output=csv";
     const BLYNK_TOKEN = "k53JqlD8pCz-0Z_ixoqYMSyMgkMVN-pw";
 
-    const REGIONAL_SERVERS = [
-      "https://blr1.blynk.cloud",
-      "https://blynk.cloud",
-      "https://ny3.blynk.cloud"
-    ];
-
-    // Initialize Map with clean standard OpenStreetMap tiles (No Watermarks/Key issues)
-    const map = L.map('map', { zoomControl: false }).setView([18.4883, 73.9449], 14);[cite: 6]
+    // 1. Initialize Map directly centered on Pune
+    const map = L.map('map', { zoomControl: false }).setView([18.4883, 73.9449], 14);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    // Reliable worldwide standard OpenStreetMap tiles
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors'
+      attribution: '&copy; OpenStreetMap'
     }).addTo(map);
 
-    const vectorLayer = L.layerGroup().addTo(map);
+    const layerGroup = L.layerGroup().addTo(map);
 
-    let isSessionRunning = false;
-    let currentLat = null;
-    let currentLng = null;
-    let previousPayload = "";
-    let screenWakeLock = null;
-    let collapseTimer = null;
-    let geolocationWatchId = null;
-    let pollingLoopId = null;
-    let initialBoundsSet = false;
+    let isLogging = false;
+    let myLat = null;
+    let myLng = null;
+    let lastBlynkPayload = "";
+    let watchId = null;
+    let blynkPollTimer = null;
+    let mapInitialFocus = false;
 
-    function expandIsland() {
-      const widget = document.getElementById("island-widget");
-      if (widget.classList.contains("minimized")) {
-        widget.classList.remove("minimized");
-        if (isSessionRunning) scheduleMinimize(6000);
-      }
-    }
-
-    function minimizeIsland() {
-      if (isSessionRunning) {
-        document.getElementById("island-widget").classList.add("minimized");
-      }
-    }
-
-    function scheduleMinimize(ms = 4000) {
-      clearTimeout(collapseTimer);
-      collapseTimer = setTimeout(minimizeIsland, ms);
-    }
-
-    function updateSystemState(isProcessing, terminalMessage) {
-      const badge = document.getElementById("system-badge");
-      const widget = document.getElementById("island-widget");
-      document.getElementById("status-terminal").innerText = terminalMessage;
-
-      if (isProcessing) {
-        badge.className = "system-pill recording";
-        badge.innerText = "RECORDING";
-        widget.classList.remove("minimized");
-        clearTimeout(collapseTimer);
+    // --- CONTROLS ---
+    function toggleLogger() {
+      if (!isLogging) {
+        startLogger();
       } else {
-        badge.className = "system-pill online";
-        badge.innerText = "MONITORING";
-        scheduleMinimize(3000);
+        stopLogger();
       }
     }
 
-    async function lockScreenAwake() {
-      try {
-        await document.getElementById("playback-anchor").play();
-      } catch (e) {}
-
-      if ('wakeLock' in navigator) {
-        try {
-          screenWakeLock = await navigator.wakeLock.request('screen');
-        } catch (e) {}
-      }
-    }
-
-    function releaseScreenLock() {
-      try {
-        const audio = document.getElementById("playback-anchor");
-        audio.pause();
-        audio.currentTime = 0;
-      } catch (e) {}
-
-      if (screenWakeLock) {
-        screenWakeLock.release().then(() => { screenWakeLock = null; }).catch(() => {});
-      }
-    }
-
-    function toggleMonitoringSession() {
-      if (!isSessionRunning) startSession();
-      else stopSession();
-    }
-
-    function startSession() {
-      isSessionRunning = true;
-      const btn = document.getElementById("session-button");
-      btn.innerText = "Stop Telemetry Tracking";
-      btn.classList.add("stop");
-
-      updateSystemState(false, "System active. Awaiting road events...");
-      lockScreenAwake();
+    function startLogger() {
+      isLogging = true;
+      document.getElementById("ui-btn").innerText = "Stop Logging";
+      document.getElementById("ui-btn").classList.add("stop");
+      document.getElementById("ui-badge").className = "badge active";
+      document.getElementById("ui-badge").innerText = "TRACKING";
+      document.getElementById("ui-status").innerText = "GPS active. Polling Blynk...";
 
       if (navigator.geolocation) {
-        geolocationWatchId = navigator.geolocation.watchPosition(
+        watchId = navigator.geolocation.watchPosition(
           (pos) => {
-            currentLat = pos.coords.latitude;
-            currentLng = pos.coords.longitude;
-            document.getElementById("metric-lat").innerText = currentLat.toFixed(4);
-            document.getElementById("metric-lng").innerText = currentLng.toFixed(4);
+            myLat = pos.coords.latitude;
+            myLng = pos.coords.longitude;
+            document.getElementById("stat-lat").innerText = myLat.toFixed(4);
+            document.getElementById("stat-lng").innerText = myLng.toFixed(4);
           },
           (err) => {},
           { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
         );
       }
 
-      pollingLoopId = setInterval(pollBlynkFeed, 1000);
-      scheduleMinimize(4000);
+      blynkPollTimer = setInterval(checkBlynk, 1100);
     }
 
-    function stopSession() {
-      isSessionRunning = false;
-      if (pollingLoopId) clearInterval(pollingLoopId);
-      if (geolocationWatchId !== null) navigator.geolocation.clearWatch(geolocationWatchId);
+    function stopLogger() {
+      isLogging = false;
+      if (blynkPollTimer) clearInterval(blynkPollTimer);
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
 
-      releaseScreenLock();
-      clearTimeout(collapseTimer);
-
-      const btn = document.getElementById("session-button");
-      const badge = document.getElementById("system-badge");
-      const widget = document.getElementById("island-widget");
-
-      btn.innerText = "Start Telemetry Tracking";
-      btn.classList.remove("stop");
-      badge.className = "system-pill";
-      badge.innerText = "STANDBY";
-      widget.classList.remove("minimized");
-
-      document.getElementById("metric-lat").innerText = "--.----";
-      document.getElementById("metric-lng").innerText = "--.----";
-      document.getElementById("status-terminal").innerText = "Session terminated. Viewer mode active.";
+      document.getElementById("ui-btn").innerText = "Start Telemetry Logging";
+      document.getElementById("ui-btn").classList.remove("stop");
+      document.getElementById("ui-badge").className = "badge";
+      document.getElementById("ui-badge").innerText = "VIEWER";
+      document.getElementById("ui-status").innerText = "Session stopped.";
+      document.getElementById("stat-lat").innerText = "--.----";
+      document.getElementById("stat-lng").innerText = "--.----";
     }
 
-    async function pollBlynkFeed() {
-      if (!isSessionRunning) return;
+    // --- BLYNK HARVESTER ---
+    async function checkBlynk() {
+      if (!isLogging) return;
 
-      let rawContent = null;
-      for (const endpoint of REGIONAL_SERVERS) {
+      const urls = [
+        `https://blr1.blynk.cloud/external/api/get?token=${BLYNK_TOKEN}&v1`,
+        `https://blynk.cloud/external/api/get?token=${BLYNK_TOKEN}&v1`
+      ];
+
+      let raw = null;
+      for (const url of urls) {
         try {
-          const res = await fetch(`${endpoint}/external/api/get?token=${BLYNK_TOKEN}&v1`);
+          const res = await fetch(url);
           if (res.ok) {
-            const body = await res.text();
-            if (body && body.trim() !== "") {
-              rawContent = body;
-              break;
-            }
+            raw = await res.text();
+            if (raw && raw.trim() !== "") break;
           }
         } catch (e) {}
       }
 
-      if (!rawContent || rawContent.trim() === "") return;
+      if (!raw || raw.trim() === "") return;
 
-      const cleanString = rawContent.replace(/^"|"$/g, '').trim();
-      if (cleanString === previousPayload) return;
-      previousPayload = cleanString;
+      // Clean quotes
+      raw = raw.replace(/^"|"$/g, '').trim();
+      if (raw === lastBlynkPayload) return;
+      lastBlynkPayload = raw;
 
-      const tokens = cleanString.split(",");
-      if (tokens.length < 3) return;
+      const parts = raw.split(",");
+      if (parts.length < 3) return;
 
-      const type = tokens[0].trim();
-      const severity = tokens[1].trim();
-      const gforce = parseFloat(tokens[2]) || 0;
+      const anomalyType = parts[0].trim();
+      const severity = parts[1].trim();
+      const gforce = parseFloat(parts[2]) || 0;
 
-      const targetLat = (currentLat !== null) ? currentLat : 18.4883;[cite: 6]
-      const targetLng = (currentLng !== null) ? currentLng : 73.9449;[cite: 6]
+      const targetLat = (myLat !== null) ? myLat : 18.4883;
+      const targetLng = (myLng !== null) ? myLng : 73.9449;
 
-      updateSystemState(true, `Pushing: ${type} (${gforce.toFixed(2)}g)...`);
-
-      const packet = {
-        type: type,
-        color: severity,
-        gforce: gforce,
-        lat: targetLat,
-        lng: targetLng
-      };
+      document.getElementById("ui-badge").className = "badge recording";
+      document.getElementById("ui-badge").innerText = "RECORDING";
+      document.getElementById("ui-status").innerText = `Logging: ${anomalyType} (${gforce.toFixed(2)}g)`;
 
       try {
-        await fetch(GOOGLE_APPS_SCRIPT_URL, {
+        await fetch(GOOGLE_SCRIPT_URL, {
           method: "POST",
           mode: "no-cors",
           headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify(packet)
+          body: JSON.stringify({
+            type: anomalyType,
+            color: severity,
+            gforce: gforce,
+            lat: targetLat,
+            lng: targetLng
+          })
         });
 
         setTimeout(() => {
-          if (isSessionRunning) {
-            updateSystemState(false, `Recorded: ${type} at [${targetLat.toFixed(4)}, ${targetLng.toFixed(4)}]`);
-            fetchGlobalSpatialDataset();
+          if (isLogging) {
+            document.getElementById("ui-badge").className = "badge active";
+            document.getElementById("ui-badge").innerText = "TRACKING";
+            document.getElementById("ui-status").innerText = `Uploaded: ${anomalyType} to Sheet`;
+            loadSheetData();
           }
         }, 1800);
       } catch (err) {
-        if (isSessionRunning) updateSystemState(false, "Relay synchronization error");
+        if (isLogging) document.getElementById("ui-status").innerText = "Sheet POST error";
       }
     }
 
-    function getSeverityTone(sev) {
-      const s = (sev || "").toUpperCase().trim();
-      if (s === "RED") return { hex: "#ff3b30", border: "#d70015" };
-      if (s === "ORANGE") return { hex: "#ff9500", border: "#c97500" };
-      return { hex: "#ffcc00", border: "#b89400" };
+    // --- CSV PARSER & MAP MARKER RENDERER ---
+    function getColor(s) {
+      const val = (s || "").toUpperCase().trim();
+      if (val === "RED") return "#ff3b30";
+      if (val === "ORANGE") return "#ff9500";
+      return "#ffcc00";
     }
 
-    function fetchGlobalSpatialDataset() {
-      const csvEndpoint = DATABASE_CSV_URL + '&nocache=' + new Date().getTime();
+    function loadSheetData() {
+      const queryUrl = CSV_URL + '&nocache=' + new Date().getTime();
 
-      Papa.parse(csvEndpoint, {
+      Papa.parse(queryUrl, {
         download: true,
         header: true,
         skipEmptyLines: true,
         complete: function(res) {
           const rows = res.data;
           if (!rows || rows.length === 0) {
-            document.getElementById("metric-clusters").innerText = "0";
+            document.getElementById("stat-spots").innerText = "0";
             return;
           }
 
-          const spatialClusters = {};
-          const validCoordinates = [];
+          const clusters = {};
+          const bounds = [];
 
-          rows.forEach(entry => {
-            const keys = Object.keys(entry);
+          rows.forEach(r => {
+            const keys = Object.keys(r);
             const latKey = keys.find(k => /lat/i.test(k));
             const lngKey = keys.find(k => /(lon|lng)/i.test(k));
             const gKey = keys.find(k => /(g_force|gforce|force)/i.test(k));
             const sevKey = keys.find(k => /(severity|color)/i.test(k));
             const typeKey = keys.find(k => /type/i.test(k));
 
-            let lat = latKey ? parseFloat(entry[latKey]) : NaN;
-            let lng = lngKey ? parseFloat(entry[lngKey]) : NaN;
+            let lat = latKey ? parseFloat(r[latKey]) : NaN;
+            let lng = lngKey ? parseFloat(r[lngKey]) : NaN;
 
-            // Geographic boundary validation
             if (isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0) return;
             if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return;
 
-            const spatialKey = lat.toFixed(4) + "_" + lng.toFixed(4);
+            const gridKey = lat.toFixed(4) + "_" + lng.toFixed(4);
 
-            if (!spatialClusters[spatialKey]) {
-              spatialClusters[spatialKey] = {
+            if (!clusters[gridKey]) {
+              clusters[gridKey] = {
                 lat: lat,
                 lng: lng,
-                incidentCount: 0,
-                peakForce: 0,
-                severity: (sevKey && entry[sevKey]) ? entry[sevKey] : "YELLOW",
-                type: (typeKey && entry[typeKey]) ? entry[typeKey] : "POTHOLE"
+                count: 0,
+                maxG: 0,
+                severity: (sevKey && r[sevKey]) ? r[sevKey] : "YELLOW",
+                type: (typeKey && r[typeKey]) ? r[typeKey] : "POTHOLE"
               };
             }
 
-            spatialClusters[spatialKey].incidentCount += 1;
-            const force = gKey ? (parseFloat(entry[gKey]) || 0) : 0;
-            if (force > spatialClusters[spatialKey].peakForce) {
-              spatialClusters[spatialKey].peakForce = force;
-              if (sevKey && entry[sevKey]) spatialClusters[spatialKey].severity = entry[sevKey];
-              if (typeKey && entry[typeKey]) spatialClusters[spatialKey].type = entry[typeKey];
+            clusters[gridKey].count += 1;
+            const force = gKey ? (parseFloat(r[gKey]) || 0) : 0;
+            if (force > clusters[gridKey].maxG) {
+              clusters[gridKey].maxG = force;
+              if (sevKey && r[sevKey]) clusters[gridKey].severity = r[sevKey];
+              if (typeKey && r[typeKey]) clusters[gridKey].type = r[typeKey];
             }
 
-            validCoordinates.push([lat, lng]);
+            bounds.push([lat, lng]);
           });
 
-          vectorLayer.clearLayers();
+          layerGroup.clearLayers();
 
-          Object.values(spatialClusters).forEach(item => {
-            const tone = getSeverityTone(item.severity);
-            const dynamicRadius = Math.min(10 + (item.incidentCount * 2), 26);
-            const dynamicAlpha = Math.min(0.40 + (item.incidentCount * 0.08), 0.80);
+          Object.values(clusters).forEach(item => {
+            const cColor = getColor(item.severity);
+            const radius = Math.min(10 + (item.count * 2), 24);
 
             const circle = L.circle([item.lat, item.lng], {
-              radius: dynamicRadius,
-              color: tone.border,
-              weight: 1.5,
-              fillColor: tone.hex,
-              fillOpacity: dynamicAlpha
+              radius: radius,
+              color: cColor,
+              weight: 2,
+              fillColor: cColor,
+              fillOpacity: 0.55
             });
 
             circle.bindPopup(`
-              <div style="font-family:-apple-system, sans-serif; padding:4px 6px;">
-                <div style="font-size:14px; font-weight:700; color:#1d1d1f; margin-bottom:4px;">${item.type}</div>
-                <div style="font-size:12px; color:#424245; line-height:1.6;">
-                  <b>Occurrences:</b> ${item.incidentCount}<br/>
-                  <b>Peak Impact:</b> ${item.peakForce.toFixed(2)} g<br/>
-                  <b>Severity:</b> <span style="font-weight:700; color:${tone.border}">${item.severity}</span>
-                </div>
+              <div style="font-size:13px; line-height:1.5;">
+                <b style="font-size:14px;">${item.type}</b><br/>
+                Reports: ${item.count}<br/>
+                Max Force: ${item.maxG.toFixed(2)} g<br/>
+                Severity: <b style="color:${cColor}">${item.severity}</b>
               </div>
             `);
 
-            circle.addTo(vectorLayer);
+            circle.addTo(layerGroup);
           });
 
-          if (!initialBoundsSet && validCoordinates.length > 0) {
-            map.fitBounds(validCoordinates, { padding: [50, 50], maxZoom: 16 });
-            initialBoundsSet = true;
+          // Zoom to points only on first load
+          if (!mapInitialFocus && bounds.length > 0) {
+            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
+            mapInitialFocus = true;
           }
 
-          document.getElementById("metric-clusters").innerText = Object.keys(spatialClusters).length;
+          document.getElementById("stat-spots").innerText = Object.keys(clusters).length;
         }
       });
     }
 
-    fetchGlobalSpatialDataset();
-    setInterval(fetchGlobalSpatialDataset, 5000);
+    // Load initial map pins immediately
+    loadSheetData();
+    setInterval(loadSheetData, 5000);
   </script>
 </body>
 </html>
