@@ -3,100 +3,184 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-  <title>RoadPulse - Public Live Road Anomaly Map</title>
+  <title>RoadPulse - Real-Time Road Quality Telemetry</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    html, body, #map { height: 100%; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; }
-
-    .dashboard-panel {
-      position: absolute; top: 12px; left: 12px; right: 12px;
-      max-width: 420px; margin: 0 auto;
-      background: rgba(15, 23, 42, 0.94);
-      color: #f8fafc; padding: 14px; border-radius: 14px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.45);
-      z-index: 1000; border: 1px solid #334155;
-      backdrop-filter: blur(10px);
-      transition: all 0.35s ease;
+    html, body, #map {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background-color: #0f172a;
     }
 
-    .dashboard-panel.collapsed {
-      padding: 8px 14px;
+    .telemetry-dashboard {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      right: 14px;
+      max-width: 420px;
+      margin: 0 auto;
+      background: rgba(15, 23, 42, 0.94);
+      color: #f8fafc;
+      padding: 16px;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      border: 1px solid #334155;
+      backdrop-filter: blur(12px);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .telemetry-dashboard.collapsed {
+      padding: 8px 16px;
       width: fit-content;
       cursor: pointer;
-      opacity: 0.9;
-      background: rgba(15, 23, 42, 0.85);
+      opacity: 0.92;
+      background: rgba(15, 23, 42, 0.88);
     }
-    .dashboard-panel.collapsed .hide-on-collapse {
+
+    .telemetry-dashboard.collapsed .collapsible-node {
       display: none !important;
     }
 
-    .panel-header { display: flex; justify-content: space-between; align-items: center; }
-    .title { font-weight: 800; font-size: 14px; letter-spacing: 0.5px; }
-    .badge { font-size: 11px; padding: 4px 10px; border-radius: 20px; font-weight: bold; background: #64748b; color: #fff; }
-    .badge.active { background: #22c55e; color: #000; }
-    .badge.logging { background: #ef4444; color: #fff; animation: pulse 1s infinite alternate; }
-
-    @keyframes pulse { from { opacity: 0.6; } to { opacity: 1; } }
-
-    #toggle-btn {
-      width: 100%; padding: 12px; font-size: 14px; border-radius: 8px; border: none;
-      background: #22c55e; color: #000; font-weight: bold; cursor: pointer;
-      margin-top: 10px; transition: background 0.2s ease;
-    }
-    #toggle-btn.stop {
-      background: #ef4444; color: #fff;
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
 
-    .coords-row {
-      display: flex; justify-content: space-around; margin-top: 10px;
-      font-size: 11px; color: #94a3b8; font-family: monospace;
+    .brand-title {
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: #f1f5f9;
     }
-    .coords-row b { color: #38bdf8; }
 
-    .legend-bar {
-      margin-top: 10px; padding-top: 8px; border-top: 1px solid #334155;
-      display: flex; justify-content: space-between; font-size: 11px; color: #cbd5e1;
+    .status-indicator {
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 9999px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      background: #475569;
+      color: #ffffff;
+      text-transform: uppercase;
     }
-    .dot { height: 8px; width: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
-    .dot.red { background: #ef4444; }
-    .dot.orange { background: #f97316; }
-    .dot.yellow { background: #eab308; }
 
-    #log-preview {
-      margin-top: 8px; font-size: 11px; color: #38bdf8; white-space: nowrap;
-      overflow: hidden; text-overflow: ellipsis; font-family: monospace;
+    .status-indicator.active {
+      background: #16a34a;
+      color: #ffffff;
     }
+
+    .status-indicator.recording {
+      background: #dc2626;
+      color: #ffffff;
+      animation: pulse-ring 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
+    @keyframes pulse-ring {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.65; }
+    }
+
+    .action-button {
+      width: 100%;
+      padding: 11px;
+      font-size: 13px;
+      border-radius: 6px;
+      border: none;
+      background: #22c55e;
+      color: #0f172a;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 12px;
+      letter-spacing: 0.025em;
+      transition: background-color 0.2s;
+    }
+
+    .action-button.terminating {
+      background: #ef4444;
+      color: #ffffff;
+    }
+
+    .metrics-container {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 12px;
+      font-size: 11px;
+      color: #94a3b8;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    .metrics-container span b {
+      color: #38bdf8;
+      font-weight: 600;
+    }
+
+    .log-terminal {
+      margin-top: 10px;
+      font-size: 11px;
+      color: #38bdf8;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    .classification-legend {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid #334155;
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #cbd5e1;
+    }
+
+    .marker-dot {
+      height: 8px;
+      width: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 5px;
+    }
+
+    .marker-dot.danger { background: #ef4444; }
+    .marker-dot.warning { background: #f97316; }
+    .marker-dot.moderate { background: #eab308; }
   </style>
 </head>
 <body>
 
-  <audio id="bg-audio" loop playsinline style="display:none;">
+  <audio id="playback-keepalive" loop playsinline style="display:none;">
     <source src="https://raw.githubusercontent.com/anars/blank-audio/master/10-minutes-of-silence.mp3" type="audio/mp3">
   </audio>
 
-  <div id="dashboard" class="dashboard-panel" onclick="expandPanel()">
-    <div class="panel-header">
-      <div class="title">🛣️ ROADPULSE MAP</div>
-      <span id="status-badge" class="badge">LIVE VIEW</span>
+  <div id="telemetry-panel" class="telemetry-dashboard" onclick="maximizePanel()">
+    <div class="header-row">
+      <div class="brand-title">RoadPulse Telemetry System</div>
+      <span id="system-status" class="status-indicator">STANDBY</span>
     </div>
 
-    <button id="toggle-btn" class="hide-on-collapse" onclick="event.stopPropagation(); toggleTracking()">
-      🛰️ 1-TAP START LOGGING (DRIVER ONLY)
+    <button id="operation-toggle" class="action-button collapsible-node" onclick="event.stopPropagation(); toggleTelemetrySession()">
+      INITIALIZE TELEMETRY LOGGER
     </button>
 
-    <div class="coords-row hide-on-collapse">
-      <span>LAT: <b id="lat-val">--.----</b></span>
-      <span>LNG: <b id="lng-val">--.----</b></span>
-      <span>HAZARDS: <b id="sync-val">Loading...</b></span>
+    <div class="metrics-container collapsible-node">
+      <span>LAT: <b id="latitude-metric">--.----</b></span>
+      <span>LNG: <b id="longitude-metric">--.----</b></span>
+      <span>ANOMALIES: <b id="cluster-metric">0 Detected</b></span>
     </div>
 
-    <div id="log-preview" class="hide-on-collapse">Ready to track. Tap above when driving.</div>
+    <div id="status-terminal" class="log-terminal collapsible-node">Telemetry receiver idle.</div>
 
-    <div class="legend-bar hide-on-collapse">
-      <span><span class="dot red"></span>High Impact</span>
-      <span><span class="dot orange"></span>Medium</span>
-      <span><span class="dot yellow"></span>Low</span>
-      <span style="color:#64748b;">• Auto-collapses</span>
+    <div class="classification-legend collapsible-node">
+      <span><span class="marker-dot danger"></span>Severe</span>
+      <span><span class="marker-dot warning"></span>Moderate</span>
+      <span><span class="marker-dot moderate"></span>Minor</span>
+      <span style="color:#64748b;">Spatial Clustering</span>
     </div>
   </div>
 
@@ -105,311 +189,335 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
   <script>
-    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxovS5SKTpxjeOnrPMhGAGIfKIqji3a4TSxt7Sf7KrI-f7Aueh3tEPk6GcuOUwV9R-T/exec";
-    const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvD2getclUw9lsCQXftP9oH4vFP8Yx9cEJe91JDXxq5p0Pz05WTGUFogtAbs5fpaW8Yj8gdIMOCrk4/pub?output=csv";
-    const BLYNK_AUTH_TOKEN = "k53JqlD8pCz-0Z_ixoqYMSyMgkMVN-pw";
+    const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxovS5SKTpxjeOnrPMhGAGIfKIqji3a4TSxt7Sf7KrI-f7Aueh3tEPk6GcuOUwV9R-T/exec";
+    const DATABASE_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvD2getclUw9lsCQXftP9oH4vFP8Yx9cEJe91JDXxq5p0Pz05WTGUFogtAbs5fpaW8Yj8gdIMOCrk4/pub?output=csv";
+    const BLYNK_TOKEN = "k53JqlD8pCz-0Z_ixoqYMSyMgkMVN-pw";
 
-    const BLYNK_SERVERS = [
+    const REGIONAL_CLUSTERS = [
       "https://blr1.blynk.cloud",
       "https://blynk.cloud",
       "https://ny3.blynk.cloud"
     ];
 
-    const map = L.map('map', { zoomControl: false }).setView([18.5204, 73.8567], 13);
+    const map = L.map('map', { zoomControl: false }).setView([18.4883, 73.9449], 13);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: '&copy; OpenStreetMap'
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
 
-    const layerGroup = L.layerGroup().addTo(map);
-    let autoZoomed = false;
+    const vectorLayer = L.layerGroup().addTo(map);
+    let viewBoundsInitialized = false;
 
-    let isTracking = false;
-    let curLat = null, curLng = null;
-    let lastProcessedVal = "";
-    let wakeLock = null;
-    let collapseTimer = null;
-    let watchId = null;
-    let blynkInterval = null;
+    let isSessionActive = false;
+    let currentLatitude = null;
+    let currentLongitude = null;
+    let previousTelemetryHash = "";
+    let displayWakeLock = null;
+    let panelCollapseTimeout = null;
+    let geolocationWatchIdentifier = null;
+    let pollingIntervalIdentifier = null;
 
-    function expandPanel() {
-      const panel = document.getElementById("dashboard");
+    function maximizePanel() {
+      const panel = document.getElementById("telemetry-panel");
       if (panel.classList.contains("collapsed")) {
         panel.classList.remove("collapsed");
-        if (isTracking) resetCollapseTimer(5000);
+        if (isSessionActive) {
+          queuePanelCollapse(6000);
+        }
       }
     }
 
-    function collapsePanel() {
-      if (isTracking) {
-        document.getElementById("dashboard").classList.add("collapsed");
+    function minimizePanel() {
+      if (isSessionActive) {
+        document.getElementById("telemetry-panel").classList.add("collapsed");
       }
     }
 
-    function resetCollapseTimer(delay = 4000) {
-      clearTimeout(collapseTimer);
-      collapseTimer = setTimeout(collapsePanel, delay);
+    function queuePanelCollapse(duration = 4000) {
+      clearTimeout(panelCollapseTimeout);
+      panelCollapseTimeout = setTimeout(minimizePanel, duration);
     }
 
-    function setLoggingState(active, text) {
-      const badge = document.getElementById("status-badge");
-      const panel = document.getElementById("dashboard");
-      const preview = document.getElementById("log-preview");
+    function setSystemState(isProcessing, message) {
+      const statusElement = document.getElementById("system-status");
+      const panelElement = document.getElementById("telemetry-panel");
+      const terminalElement = document.getElementById("status-terminal");
 
-      preview.innerText = text;
+      terminalElement.innerText = message;
 
-      if (active) {
-        badge.className = "badge logging";
-        badge.innerText = "RECORDING";
-        panel.classList.remove("collapsed");
-        clearTimeout(collapseTimer);
+      if (isProcessing) {
+        statusElement.className = "status-indicator recording";
+        statusElement.innerText = "RECORDING";
+        panelElement.classList.remove("collapsed");
+        clearTimeout(panelCollapseTimeout);
       } else {
-        badge.className = "badge active";
-        badge.innerText = "ONLINE";
-        resetCollapseTimer(3000);
+        statusElement.className = "status-indicator active";
+        statusElement.innerText = "MONITORING";
+        queuePanelCollapse(3000);
       }
     }
 
-    async function enableSleepPrevention() {
+    async function retainSystemExecution() {
       try {
-        const audio = document.getElementById("bg-audio");
-        audio.play().catch(() => {});
-      } catch (e) {}
+        const audioNode = document.getElementById("playback-keepalive");
+        await audioNode.play();
+      } catch (exception) {}
 
       if ('wakeLock' in navigator) {
         try {
-          wakeLock = await navigator.wakeLock.request('screen');
-        } catch (e) {}
+          displayWakeLock = await navigator.wakeLock.request('screen');
+        } catch (exception) {}
       }
     }
 
-    function disableSleepPrevention() {
+    function releaseSystemExecution() {
       try {
-        const audio = document.getElementById("bg-audio");
-        audio.pause();
-        audio.currentTime = 0;
-      } catch (e) {}
+        const audioNode = document.getElementById("playback-keepalive");
+        audioNode.pause();
+        audioNode.currentTime = 0;
+      } catch (exception) {}
 
-      if (wakeLock !== null) {
-        wakeLock.release().then(() => { wakeLock = null; }).catch(() => {});
+      if (displayWakeLock !== null) {
+        displayWakeLock.release().then(() => {
+          displayWakeLock = null;
+        }).catch(() => {});
       }
     }
 
-    function toggleTracking() {
-      if (!isTracking) {
-        startTracking();
+    function toggleTelemetrySession() {
+      if (!isSessionActive) {
+        startTelemetrySession();
       } else {
-        stopTracking();
+        terminateTelemetrySession();
       }
     }
 
-    function startTracking() {
-      isTracking = true;
+    function startTelemetrySession() {
+      isSessionActive = true;
 
-      const btn = document.getElementById("toggle-btn");
-      const badge = document.getElementById("status-badge");
-      btn.innerText = "⏹️ STOP LOGGING";
-      btn.classList.add("stop");
-      badge.className = "badge active";
-      badge.innerText = "ONLINE";
+      const toggleButton = document.getElementById("operation-toggle");
+      const statusElement = document.getElementById("system-status");
+      
+      toggleButton.innerText = "TERMINATE LOGGING SESSION";
+      toggleButton.classList.add("terminating");
+      statusElement.className = "status-indicator active";
+      statusElement.innerText = "MONITORING";
 
-      enableSleepPrevention();
+      retainSystemExecution();
 
       if (!navigator.geolocation) {
-        setLoggingState(false, "Error: Geolocation not supported");
+        setSystemState(false, "Hardware interface failure: Geolocation unavailable");
         return;
       }
 
-      watchId = navigator.geolocation.watchPosition(
-        (pos) => {
-          curLat = pos.coords.latitude;
-          curLng = pos.coords.longitude;
-          document.getElementById("lat-val").innerText = curLat.toFixed(4);
-          document.getElementById("lng-val").innerText = curLng.toFixed(4);
+      geolocationWatchIdentifier = navigator.geolocation.watchPosition(
+        (position) => {
+          currentLatitude = position.coords.latitude;
+          currentLongitude = position.coords.longitude;
+          document.getElementById("latitude-metric").innerText = currentLatitude.toFixed(4);
+          document.getElementById("longitude-metric").innerText = currentLongitude.toFixed(4);
         },
-        (err) => {
-          setLoggingState(false, "GPS Error: " + err.message);
+        (error) => {
+          document.getElementById("status-terminal").innerText = `Coordinate acquisition failure: ${error.message}`;
         },
         { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
       );
 
-      blynkInterval = setInterval(pollBlynk, 1000);
-      setLoggingState(false, "GPS & Blynk polling active.");
-      resetCollapseTimer(4000);
+      pollingIntervalIdentifier = setInterval(synchronizeTelemetryFeed, 1000);
+      setSystemState(false, "Telemetry receiver synchronized. Awaiting event.");
+      queuePanelCollapse(4000);
     }
 
-    function stopTracking() {
-      isTracking = false;
+    function terminateTelemetrySession() {
+      isSessionActive = false;
 
-      if (blynkInterval) clearInterval(blynkInterval);
-      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-      disableSleepPrevention();
-      clearTimeout(collapseTimer);
+      if (pollingIntervalIdentifier) clearInterval(pollingIntervalIdentifier);
+      if (geolocationWatchIdentifier !== null) navigator.geolocation.clearWatch(geolocationWatchIdentifier);
+      
+      releaseSystemExecution();
+      clearTimeout(panelCollapseTimeout);
 
-      const btn = document.getElementById("toggle-btn");
-      const badge = document.getElementById("status-badge");
-      const panel = document.getElementById("dashboard");
+      const toggleButton = document.getElementById("operation-toggle");
+      const statusElement = document.getElementById("system-status");
+      const panelElement = document.getElementById("telemetry-panel");
 
-      btn.innerText = "🛰️ 1-TAP START LOGGING (DRIVER ONLY)";
-      btn.classList.remove("stop");
-      badge.className = "badge";
-      badge.innerText = "LIVE VIEW";
-      panel.classList.remove("collapsed");
+      toggleButton.innerText = "INITIALIZE TELEMETRY LOGGER";
+      toggleButton.classList.remove("terminating");
+      statusElement.className = "status-indicator";
+      statusElement.innerText = "STANDBY";
+      panelElement.classList.remove("collapsed");
 
-      document.getElementById("lat-val").innerText = "--.----";
-      document.getElementById("lng-val").innerText = "--.----";
-      document.getElementById("log-preview").innerText = "Logging halted. Viewer mode active.";
+      document.getElementById("latitude-metric").innerText = "--.----";
+      document.getElementById("longitude-metric").innerText = "--.----";
+      document.getElementById("status-terminal").innerText = "Session terminated. Viewer mode active.";
     }
 
-    async function pollBlynk() {
-      if (!isTracking) return;
+    async function synchronizeTelemetryFeed() {
+      if (!isSessionActive) return;
 
-      let rawVal = null;
-      for (const server of BLYNK_SERVERS) {
+      let inboundPayload = null;
+
+      for (const endpoint of REGIONAL_CLUSTERS) {
         try {
-          const res = await fetch(`${server}/external/api/get?token=${BLYNK_AUTH_TOKEN}&v1`);
-          if (res.ok) {
-            rawVal = await res.json();
-            break;
+          const response = await fetch(`${endpoint}/external/api/get?token=${BLYNK_TOKEN}&v1`);
+          if (response.ok) {
+            const rawContent = await response.text();
+            if (rawContent && rawContent.trim() !== "") {
+              inboundPayload = rawContent;
+              break;
+            }
           }
-        } catch (e) {}
+        } catch (networkError) {}
       }
 
-      if (!rawVal || rawVal === "" || rawVal === lastProcessedVal) return;
+      if (!inboundPayload || inboundPayload.trim() === "") {
+        return;
+      }
 
-      lastProcessedVal = rawVal;
+      const sanitizedPayload = inboundPayload.replace(/^"|"$/g, '').trim();
 
-      const parts = String(rawVal).split(",");
-      if (parts.length < 3) return;
+      if (sanitizedPayload === previousTelemetryHash) {
+        return;
+      }
 
-      const type = parts[0].trim();
-      const severity = parts[1].trim();
-      const gforce = parseFloat(parts[2]) || 0;
+      previousTelemetryHash = sanitizedPayload;
 
-      const sendLat = (curLat !== null) ? curLat : 18.5204;
-      const sendLng = (curLng !== null) ? curLng : 73.8567;
+      const telemetrySegments = sanitizedPayload.split(",");
+      if (telemetrySegments.length < 3) {
+        return;
+      }
 
-      setLoggingState(true, `Pushing: ${type} (${gforce}g)...`);
+      const anomalyType = telemetrySegments[0].trim();
+      const anomalySeverity = telemetrySegments[1].trim();
+      const measuredForce = parseFloat(telemetrySegments[2]) || 0;
 
-      const payloadData = {
-        type: type,
-        color: severity,
-        gforce: gforce,
-        lat: sendLat,
-        lng: sendLng
+      const submissionLatitude = (currentLatitude !== null) ? currentLatitude : 18.4883;
+      const submissionLongitude = (currentLongitude !== null) ? currentLongitude : 73.9449;
+
+      setSystemState(true, `Pushing telemetry: ${anomalyType} (${measuredForce.toFixed(2)}g)`);
+
+      const networkTransmissionPackage = {
+        type: anomalyType,
+        color: anomalySeverity,
+        gforce: measuredForce,
+        lat: submissionLatitude,
+        lng: submissionLongitude
       };
 
       try {
-        await fetch(WEB_APP_URL, {
+        await fetch(GOOGLE_APPS_SCRIPT_URL, {
           method: "POST",
           mode: "no-cors",
           headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify(payloadData)
+          body: JSON.stringify(networkTransmissionPackage)
         });
 
         setTimeout(() => {
-          if (isTracking) {
-            setLoggingState(false, `Recorded: ${type} at [${sendLat.toFixed(3)}, ${sendLng.toFixed(3)}]`);
-            refreshMapData();
+          if (isSessionActive) {
+            setSystemState(false, `Recorded: ${anomalyType} at [${submissionLatitude.toFixed(4)}, ${submissionLongitude.toFixed(4)}]`);
+            fetchGlobalSpatialDataset();
           }
-        }, 2200);
+        }, 2000);
 
-      } catch (err) {
-        if (isTracking) setLoggingState(false, "Post Error: " + err.message);
+      } catch (transmissionError) {
+        if (isSessionActive) {
+          setSystemState(false, `Transmission failure: ${transmissionError.message}`);
+        }
       }
     }
 
-    function getColorRGB(severity) {
-      const s = (severity || "").toUpperCase().trim();
-      if (s === "RED") return "239, 68, 68";
-      if (s === "ORANGE") return "249, 115, 22";
+    function getSeverityRGB(severityString) {
+      const normalized = (severityString || "").toUpperCase().trim();
+      if (normalized === "RED") return "239, 68, 68";
+      if (normalized === "ORANGE") return "249, 115, 22";
       return "234, 179, 8";
     }
 
-    function refreshMapData() {
-      const fetchUrl = CSV_URL + '&nocache=' + new Date().getTime();
+    function fetchGlobalSpatialDataset() {
+      const datasetQueryUri = DATABASE_CSV_URL + '&nocache=' + new Date().getTime();
 
-      Papa.parse(fetchUrl, {
+      Papa.parse(datasetQueryUri, {
         download: true,
         header: true,
         skipEmptyLines: true,
-        complete: function(results) {
-          const rows = results.data;
-          if (!rows || rows.length === 0) {
-            document.getElementById("sync-val").innerText = "0 Spots";
+        complete: function(parsingResults) {
+          const tabularData = parsingResults.data;
+          if (!tabularData || tabularData.length === 0) {
+            document.getElementById("cluster-metric").innerText = "0 Detected";
             return;
           }
 
-          layerGroup.clearLayers();
-          const clusters = {};
-          const bounds = [];
+          vectorLayer.clearLayers();
+          const spatialClusters = {};
+          const structuralBounds = [];
 
-          rows.forEach(r => {
-            const lat = parseFloat(r.Latitude);
-            const lng = parseFloat(r.Longitude);
+          tabularData.forEach(entry => {
+            const latitude = parseFloat(entry.Latitude);
+            const longitude = parseFloat(entry.Longitude);
 
-            if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
-              const clusterKey = lat.toFixed(4) + "_" + lng.toFixed(4);
-              if (!clusters[clusterKey]) {
-                clusters[clusterKey] = {
-                  lat: lat,
-                  lng: lng,
-                  count: 0,
-                  maxG: 0,
-                  severity: r.Severity || "YELLOW",
-                  type: r.Type || "POTHOLE"
+            if (!isNaN(latitude) && !isNaN(longitude) && latitude !== 0 && longitude !== 0) {
+              const spatialKey = latitude.toFixed(4) + "_" + longitude.toFixed(4);
+              if (!spatialClusters[spatialKey]) {
+                spatialClusters[spatialKey] = {
+                  lat: latitude,
+                  lng: longitude,
+                  incidentCount: 0,
+                  peakForce: 0,
+                  severityGrade: entry.Severity || "YELLOW",
+                  classification: entry.Type || "POTHOLE"
                 };
               }
-              clusters[clusterKey].count += 1;
-              const gVal = parseFloat(r.G_Force) || 0;
-              if (gVal > clusters[clusterKey].maxG) {
-                clusters[clusterKey].maxG = gVal;
-                clusters[clusterKey].severity = r.Severity || "YELLOW";
-                clusters[clusterKey].type = r.Type || "POTHOLE";
+
+              spatialClusters[spatialKey].incidentCount += 1;
+              const observedForce = parseFloat(entry.G_Force) || 0;
+              if (observedForce > spatialClusters[spatialKey].peakForce) {
+                spatialClusters[spatialKey].peakForce = observedForce;
+                spatialClusters[spatialKey].severityGrade = entry.Severity || "YELLOW";
+                spatialClusters[spatialKey].classification = entry.Type || "POTHOLE";
               }
             }
           });
 
-          Object.values(clusters).forEach(item => {
-            const rgb = getColorRGB(item.severity);
-            const radiusMeters = 8 + (item.count - 1) * 4;
-            const fillAlpha = Math.min(0.35 + (item.count * 0.08), 0.85);
+          Object.values(spatialClusters).forEach(feature => {
+            const rgbColorSignature = getSeverityRGB(feature.severityGrade);
+            const dynamicRadiusMeters = 8 + (feature.incidentCount - 1) * 4;
+            const dynamicOpacity = Math.min(0.35 + (feature.incidentCount * 0.08), 0.85);
 
-            const circle = L.circle([item.lat, item.lng], {
-              radius: radiusMeters,
-              color: `rgba(${rgb}, 0.9)`,
+            const anomalyCircle = L.circle([feature.lat, feature.lng], {
+              radius: dynamicRadiusMeters,
+              color: `rgba(${rgbColorSignature}, 0.9)`,
               weight: 1.5,
-              fillColor: `rgba(${rgb}, ${fillAlpha})`,
-              fillOpacity: fillAlpha
+              fillColor: `rgba(${rgbColorSignature}, ${dynamicOpacity})`,
+              fillOpacity: dynamicOpacity
             });
 
-            circle.bindPopup(`
-              <div style="font-size:13px; line-height:1.5; color:#0f172a;">
-                <b style="font-size:14px;">${item.type}</b><br/>
-                <b>Total Reports:</b> ${item.count}<br/>
-                <b>Peak Impact:</b> ${item.maxG.toFixed(2)} g<br/>
-                <b>Severity:</b> <span style="font-weight:bold; color:rgb(${rgb})">${item.severity}</span>
+            anomalyCircle.bindPopup(`
+              <div style="font-size:12px; line-height:1.6; color:#0f172a;">
+                <b style="font-size:13px;">${feature.classification}</b><br/>
+                <b>Total Logged Incidents:</b> ${feature.incidentCount}<br/>
+                <b>Peak Dynamic Impact:</b> ${feature.peakForce.toFixed(2)} g<br/>
+                <b>Severity Classification:</b> <span style="font-weight:700; color:rgb(${rgbColorSignature})">${feature.severityGrade}</span>
               </div>
             `);
 
-            circle.addTo(layerGroup);
-            bounds.push([item.lat, item.lng]);
+            anomalyCircle.addTo(vectorLayer);
+            structuralBounds.push([feature.lat, feature.lng]);
           });
 
-          if (!autoZoomed && bounds.length > 0) {
-            map.fitBounds(bounds, { padding: [60, 60] });
-            autoZoomed = true;
+          if (!viewBoundsInitialized && structuralBounds.length > 0) {
+            map.fitBounds(structuralBounds, { padding: [60, 60] });
+            viewBoundsInitialized = true;
           }
 
-          document.getElementById("sync-val").innerText = `${Object.keys(clusters).length} Spots`;
+          document.getElementById("cluster-metric").innerText = `${Object.keys(spatialClusters).length} Detected`;
         }
       });
     }
 
-    refreshMapData();
-    setInterval(refreshMapData, 5000);
+    fetchGlobalSpatialDataset();
+    setInterval(fetchGlobalSpatialDataset, 5000);
   </script>
 </body>
 </html>
