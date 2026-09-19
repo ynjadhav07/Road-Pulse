@@ -2,33 +2,85 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>RoadPulse Live Road Heatmap</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <title>RoadPulse - Live Map & GPS Tracker</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    html, body, #map { height: 100%; margin: 0; padding: 0; font-family: sans-serif; }
-    .legend-box {
-      position: absolute; top: 15px; right: 15px; background: rgba(15, 23, 42, 0.92);
-      color: #f8fafc; padding: 14px 18px; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-      z-index: 1000; font-size: 13px; line-height: 1.6; border: 1px solid #334155;
+    html, body, #map { height: 100%; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    
+    /* Floating Top Dashboard */
+    .dashboard-panel {
+      position: absolute; top: 12px; left: 12px; right: 12px;
+      max-width: 420px; margin: 0 auto;
+      background: rgba(15, 23, 42, 0.94);
+      color: #f8fafc; padding: 14px; border-radius: 14px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      z-index: 1000; border: 1px solid #334155;
+      backdrop-filter: blur(8px);
     }
-    .circle-sample { height: 12px; width: 12px; border-radius: 50%; display: inline-block; margin-right: 8px; vertical-align: middle; }
-    .red { background-color: rgba(239, 68, 68, 0.85); }
-    .orange { background-color: rgba(249, 115, 22, 0.85); }
-    .yellow { background-color: rgba(234, 179, 8, 0.85); }
-    #status { font-weight: bold; color: #38bdf8; margin-top: 5px; }
+    
+    .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .title { font-weight: 800; font-size: 15px; letter-spacing: 0.5px; }
+    .badge { font-size: 11px; padding: 4px 10px; border-radius: 20px; font-weight: bold; background: #64748b; color: #fff; }
+    .badge.active { background: #22c55e; color: #000; }
+
+    #track-btn {
+      width: 100%; padding: 12px; font-size: 15px; border-radius: 8px; border: none;
+      background: #22c55e; color: #000; font-weight: bold; cursor: pointer;
+      display: flex; justify-content: center; align-items: center; gap: 8px;
+      box-shadow: 0 2px 8px rgba(34,197,94,0.3);
+    }
+    #track-btn.active { background: #334155; color: #94a3b8; box-shadow: none; }
+
+    .coords-row {
+      display: flex; justify-content: space-around; margin-top: 10px;
+      font-size: 11px; color: #94a3b8; font-family: monospace;
+    }
+    .coords-row b { color: #38bdf8; }
+
+    /* Compact Legend */
+    .legend-bar {
+      margin-top: 10px; padding-top: 8px; border-top: 1px solid #334155;
+      display: flex; justify-content: space-between; font-size: 11px; color: #cbd5e1;
+    }
+    .dot { height: 9px; width: 9px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+    .dot.red { background: #ef4444; }
+    .dot.orange { background: #f97316; }
+    .dot.yellow { background: #eab308; }
+
+    #log-preview {
+      margin-top: 8px; font-size: 11px; color: #38bdf8; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; font-family: monospace;
+    }
   </style>
 </head>
 <body>
 
-  <div class="legend-box">
-    <b>Road Anomaly Clusters</b><br/>
-    <span class="circle-sample red"></span> High Severity (Red)<br/>
-    <span class="circle-sample orange"></span> Medium Severity (Orange)<br/>
-    <span class="circle-sample yellow"></span> Low Severity (Yellow)<br/>
-    <hr style="border: 0; border-top: 1px solid #334155; margin: 8px 0;"/>
-    <small style="color: #94a3b8;">*Circles expand with repeat hits</small>
-    <div id="status">Connecting to Sheet...</div>
+  <!-- Single Screen Dashboard -->
+  <div class="dashboard-panel">
+    <div class="panel-header">
+      <div class="title">🛣️ ROADPULSE</div>
+      <span id="status-badge" class="badge">STANDBY</span>
+    </div>
+
+    <button id="track-btn" onclick="toggleTracking()">
+      <span>🛰️ 1-TAP START TRACKING</span>
+    </button>
+
+    <div class="coords-row">
+      <span>LAT: <b id="lat-val">--.----</b></span>
+      <span>LNG: <b id="lng-val">--.----</b></span>
+      <span>STATUS: <b id="sync-val">Ready</b></span>
+    </div>
+
+    <div id="log-preview">Ready to log hazards while driving...</div>
+
+    <div class="legend-bar">
+      <span><span class="dot red"></span>High</span>
+      <span><span class="dot orange"></span>Medium</span>
+      <span><span class="dot yellow"></span>Low</span>
+      <span style="color:#64748b;">• Repeat hits grow circles</span>
+    </div>
   </div>
 
   <div id="map"></div>
@@ -36,17 +88,138 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
   <script>
+    // Configuration URLs
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxovS5SKTpxjeOnrPMhGAGIfKIqji3a4TSxt7Sf7KrI-f7Aueh3tEPk6GcuOUwV9R-T/exec";
     const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvD2getclUw9lsCQXftP9oH4vFP8Yx9cEJe91JDXxq5p0Pz05WTGUFogtAbs5fpaW8Yj8gdIMOCrk4/pub?gid=0&single=true&output=csv";
+    const BLYNK_AUTH_TOKEN = "k53JqlD8pCz-0Z_ixoqYMSyMgkMVN-pw";
 
-    const map = L.map('map').setView([18.5204, 73.8567], 13);
+    const BLYNK_SERVERS = [
+      "https://blr1.blynk.cloud",
+      "https://blynk.cloud",
+      "https://ny3.blynk.cloud"
+    ];
+
+    // --- LEAFLET MAP INITIALIZATION ---
+    const map = L.map('map', { zoomControl: false }).setView([18.5204, 73.8567], 13);
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
-      attribution: '&copy; OpenStreetMap &copy; CARTO'
+      attribution: '&copy; OpenStreetMap'
     }).addTo(map);
 
     const layerGroup = L.layerGroup().addTo(map);
     let autoZoomed = false;
 
+    // --- GPS & TRACKING ENGINE ---
+    let isTracking = false;
+    let curLat = null, curLng = null;
+    let lastProcessedVal = "";
+    let wakeLock = null;
+    let audioCtx = null;
+
+    function updateLog(msg) {
+      document.getElementById("log-preview").innerText = msg;
+    }
+
+    function startKeepAlive() {
+      try {
+        window.AudioContext = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContext();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        gain.gain.value = 0.0001;
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+      } catch (e) {}
+
+      if ('wakeLock' in navigator) {
+        navigator.wakeLock.request('screen').then(wl => { wakeLock = wl; }).catch(() => {});
+      }
+    }
+
+    function toggleTracking() {
+      if (isTracking) return;
+      isTracking = true;
+
+      const btn = document.getElementById("track-btn");
+      const badge = document.getElementById("status-badge");
+      btn.innerText = "🛰️ TRACKING ACTIVE";
+      btn.classList.add("active");
+      badge.innerText = "ONLINE";
+      badge.classList.add("active");
+
+      startKeepAlive();
+
+      if (!navigator.geolocation) {
+        updateLog("Geolocation not supported!");
+        return;
+      }
+
+      navigator.geolocation.watchPosition(
+        (pos) => {
+          curLat = pos.coords.latitude;
+          curLng = pos.coords.longitude;
+          document.getElementById("lat-val").innerText = curLat.toFixed(4);
+          document.getElementById("lng-val").innerText = curLng.toFixed(4);
+        },
+        (err) => updateLog("GPS: " + err.message),
+        { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
+      );
+
+      setInterval(pollBlynk, 1200);
+      updateLog("GPS & Blynk active. Drive safely!");
+    }
+
+    async function pollBlynk() {
+      let json = null;
+      for (const server of BLYNK_SERVERS) {
+        try {
+          const res = await fetch(`${server}/external/api/get?token=${BLYNK_AUTH_TOKEN}&v1&v2&v3`);
+          if (res.ok) {
+            json = await res.json();
+            break;
+          }
+        } catch (e) {}
+      }
+
+      if (!json) return;
+
+      const type = json.v1 || "";
+      const severity = json.v2 || "YELLOW";
+      const gforce = json.v3 || 0;
+      const uniqueCheck = `${type}_${gforce}`;
+
+      if (type !== "" && uniqueCheck !== lastProcessedVal) {
+        lastProcessedVal = uniqueCheck;
+        updateLog(`Detected: ${type} (${gforce}g). Sending...`);
+
+        const sendLat = (curLat !== null) ? curLat : 18.5204;
+        const sendLng = (curLng !== null) ? curLng : 73.8567;
+
+        try {
+          await fetch(WEB_APP_URL, {
+            method: "POST",
+            mode: "no-cors",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: type,
+              color: severity,
+              gforce: gforce,
+              lat: sendLat,
+              lng: sendLng
+            })
+          });
+          updateLog(`Logged: ${type} at [${sendLat.toFixed(3)}, ${sendLng.toFixed(3)}]`);
+          setTimeout(refreshMapData, 1000);
+        } catch (err) {
+          updateLog("Post failed: " + err.message);
+        }
+      }
+    }
+
+    // --- MAP RENDERING ENGINE ---
     function getColorRGB(severity) {
       const s = (severity || "").toUpperCase().trim();
       if (s === "RED") return "239, 68, 68";
@@ -63,10 +236,7 @@
         skipEmptyLines: true,
         complete: function(results) {
           const rows = results.data;
-          if (!rows || rows.length === 0) {
-            document.getElementById('status').innerText = "Sheet empty.";
-            return;
-          }
+          if (!rows || rows.length === 0) return;
 
           layerGroup.clearLayers();
           const clusters = {};
@@ -100,7 +270,7 @@
 
           Object.values(clusters).forEach(item => {
             const rgb = getColorRGB(item.severity);
-            const radiusMeters = 7 + (item.count - 1) * 4; 
+            const radiusMeters = 8 + (item.count - 1) * 4;
             const fillAlpha = Math.min(0.35 + (item.count * 0.08), 0.85);
 
             const circle = L.circle([item.lat, item.lng], {
@@ -112,10 +282,10 @@
             });
 
             circle.bindPopup(`
-              <div style="font-size: 13px; line-height: 1.5;">
-                <b style="color: #0f172a; font-size: 14px;">${item.type}</b><br/>
-                <b>Total Reports:</b> ${item.count}<br/>
-                <b>Peak Impact:</b> ${item.maxG.toFixed(2)} g<br/>
+              <div style="font-size:13px; line-height:1.4;">
+                <b style="color:#0f172a;">${item.type}</b><br/>
+                <b>Reports:</b> ${item.count}<br/>
+                <b>Max Impact:</b> ${item.maxG.toFixed(2)} g<br/>
                 <b>Severity:</b> ${item.severity}
               </div>
             `);
@@ -125,11 +295,11 @@
           });
 
           if (!autoZoomed && bounds.length > 0) {
-            map.fitBounds(bounds, { padding: [40, 40] });
+            map.fitBounds(bounds, { padding: [50, 50] });
             autoZoomed = true;
           }
 
-          document.getElementById('status').innerText = `Live: ${Object.keys(clusters).length} clusters detected`;
+          document.getElementById("sync-val").innerText = `${Object.keys(clusters).length} Spots`;
         }
       });
     }
