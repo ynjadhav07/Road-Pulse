@@ -25,21 +25,25 @@
     }
 
     [data-theme="dark"] {
-      --bg-canvas: #000000;
-      --card-bg: rgba(28, 28, 30, 0.82);
+      --bg-canvas: #121214;
+      --card-bg: rgba(28, 28, 30, 0.85);
       --card-border: rgba(255, 255, 255, 0.12);
-      --card-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+      --card-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
       --text-primary: #f5f5f7;
       --text-secondary: #98989d;
-      --stat-box-bg: rgba(255, 255, 255, 0.07);
+      --stat-box-bg: rgba(255, 255, 255, 0.08);
       --border-separator: rgba(255, 255, 255, 0.1);
       --badge-bg: rgba(255, 255, 255, 0.12);
       --badge-color: #d1d1d6;
       --status-color: #aeaeb2;
       --btn-primary: #0a84ff;
       --btn-text: #ffffff;
-      --popup-bg: rgba(30, 30, 32, 0.94);
+      --popup-bg: rgba(30, 30, 32, 0.95);
       --popup-text: #f5f5f7;
+    }
+
+    [data-theme="dark"] .leaflet-tile-pane {
+      filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
     }
 
     * {
@@ -144,6 +148,11 @@
       color: #ff453a;
     }
 
+    .badge.offline {
+      background: rgba(255, 159, 10, 0.2);
+      color: #ff9f0a;
+    }
+
     .btn-action {
       width: 100%;
       margin-top: 12px;
@@ -168,21 +177,21 @@
 
     .stats-grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 6px;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 5px;
       margin-top: 12px;
     }
 
     .stat-box {
       background: var(--stat-box-bg);
       border-radius: 10px;
-      padding: 8px 4px;
+      padding: 8px 3px;
       text-align: center;
       transition: background 0.3s ease;
     }
 
     .stat-label {
-      font-size: 10px;
+      font-size: 9px;
       font-weight: 600;
       color: var(--text-secondary);
       text-transform: uppercase;
@@ -244,6 +253,10 @@
 </head>
 <body>
 
+  <audio id="bg-audio-engine" loop preload="auto">
+    <source src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA" type="audio/wav">
+  </audio>
+
   <div class="ios-card">
     <div class="card-header">
       <div class="title">RoadPulse Telemetry</div>
@@ -285,6 +298,10 @@
         <div class="stat-label">Spots</div>
         <div id="stat-spots" class="stat-val">0</div>
       </div>
+      <div class="stat-box">
+        <div class="stat-label">Queue</div>
+        <div id="stat-queue" class="stat-val">0</div>
+      </div>
     </div>
 
     <div id="ui-status" class="status-text">Public map active. Tap circle for data.</div>
@@ -305,17 +322,15 @@
     const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxovS5SKTpxjeOnrPMhGAGIfKIqji3a4TSxt7Sf7KrI-f7Aueh3tEPk6GcuOUwV9R-T/exec";
     const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvD2getclUw9lsCQXftP9oH4vFP8Yx9cEJe91JDXxq5p0Pz05WTGUFogtAbs5fpaW8Yj8gdIMOCrk4/pub?output=csv";
     const BLYNK_TOKEN = "k53JqlD8pCz-0Z_ixoqYMSyMgkMVN-pw";
-
-    const LIGHT_TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-    const DARK_TILES = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+    const QUEUE_STORAGE_KEY = "roadpulse_offline_queue";
 
     let currentTheme = localStorage.getItem("roadpulse_theme") || "light";
     document.documentElement.setAttribute("data-theme", currentTheme);
 
-    const map = L.map('map', { zoomControl: false }).setView([18.35, 73.90], 11);
+    const map = L.map('map', { zoomControl: false, preferCanvas: true }).setView([18.35, 73.90], 11);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    let baseTileLayer = L.tileLayer(currentTheme === "dark" ? DARK_TILES : LIGHT_TILES, {
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap'
     }).addTo(map);
@@ -329,6 +344,76 @@
     let watchId = null;
     let blynkPollTimer = null;
     let mapInitialFocus = false;
+    let wakeLock = null;
+    let isFlushingQueue = false;
+    let cachedRawRows = [];
+
+    const audioEngine = document.getElementById("bg-audio-engine");
+
+    function getStoredQueue() {
+      try {
+        const raw = localStorage.getItem(QUEUE_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveStoredQueue(queue) {
+      localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queue));
+      updateQueueUI();
+    }
+
+    function updateQueueUI() {
+      const q = getStoredQueue();
+      const el = document.getElementById("stat-queue");
+      if (el) el.innerText = q.length;
+    }
+
+    function queuePayloadLocally(payload) {
+      const q = getStoredQueue();
+      q.push(payload);
+      saveStoredQueue(q);
+      document.getElementById("ui-badge").className = "badge offline";
+      document.getElementById("ui-badge").innerText = "QUEUED";
+      document.getElementById("ui-status").innerText = `Offline: Buffered to device (${q.length} in queue)`;
+    }
+
+    async function flushOfflineQueue() {
+      if (isFlushingQueue || !navigator.onLine) return;
+      let q = getStoredQueue();
+      if (q.length === 0) return;
+
+      isFlushingQueue = true;
+      document.getElementById("ui-status").innerText = `Syncing ${q.length} cached records...`;
+
+      while (q.length > 0 && navigator.onLine) {
+        const item = q[0];
+        try {
+          await fetch(GOOGLE_SCRIPT_URL, {
+            method: "POST",
+            mode: "no-cors",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify(item)
+          });
+          q.shift();
+          saveStoredQueue(q);
+        } catch (err) {
+          break;
+        }
+      }
+
+      isFlushingQueue = false;
+      updateQueueUI();
+      loadSheetData();
+      if (isLogging) {
+        document.getElementById("ui-badge").className = "badge active";
+        document.getElementById("ui-badge").innerText = "TRACKING";
+      }
+    }
+
+    window.addEventListener("online", flushOfflineQueue);
+    setInterval(flushOfflineQueue, 10000);
 
     function applyThemeUI(theme) {
       const moon = document.getElementById("theme-icon-moon");
@@ -347,17 +432,33 @@
       document.documentElement.setAttribute("data-theme", currentTheme);
       localStorage.setItem("roadpulse_theme", currentTheme);
       applyThemeUI(currentTheme);
-
-      map.removeLayer(baseTileLayer);
-      baseTileLayer = L.tileLayer(currentTheme === "dark" ? DARK_TILES : LIGHT_TILES, {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap'
-      }).addTo(map);
-
-      loadSheetData();
+      renderProcessedMarkers();
     }
 
     applyThemeUI(currentTheme);
+    updateQueueUI();
+
+    async function requestWakeLock() {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen');
+        }
+      } catch (err) {}
+    }
+
+    function releaseWakeLock() {
+      if (wakeLock !== null) {
+        wakeLock.release().then(() => {
+          wakeLock = null;
+        }).catch(() => {});
+      }
+    }
+
+    document.addEventListener("visibilitychange", async () => {
+      if (isLogging && document.visibilityState === 'visible') {
+        await requestWakeLock();
+      }
+    });
 
     function toggleLogger() {
       if (!isLogging) {
@@ -367,13 +468,19 @@
       }
     }
 
-    function startLogger() {
+    async function startLogger() {
       isLogging = true;
       document.getElementById("ui-btn").innerText = "Stop Logging";
       document.getElementById("ui-btn").classList.add("stop");
       document.getElementById("ui-badge").className = "badge active";
       document.getElementById("ui-badge").innerText = "TRACKING";
-      document.getElementById("ui-status").innerText = "GPS active. Polling Blynk...";
+      document.getElementById("ui-status").innerText = "Background logging locked & active";
+
+      await requestWakeLock();
+
+      try {
+        audioEngine.play().catch(() => {});
+      } catch (e) {}
 
       if (navigator.geolocation) {
         watchId = navigator.geolocation.watchPosition(
@@ -383,18 +490,28 @@
             document.getElementById("stat-lat").innerText = myLat.toFixed(4);
             document.getElementById("stat-lng").innerText = myLng.toFixed(4);
           },
-          (err) => {},
-          { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
+          (err) => {
+            document.getElementById("ui-status").innerText = "GPS Lock Weak/Lost";
+          },
+          { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
         );
       }
 
       blynkPollTimer = setInterval(checkBlynk, 1100);
+      flushOfflineQueue();
     }
 
     function stopLogger() {
       isLogging = false;
       if (blynkPollTimer) clearInterval(blynkPollTimer);
       if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+
+      releaseWakeLock();
+
+      try {
+        audioEngine.pause();
+        audioEngine.currentTime = 0;
+      } catch (e) {}
 
       document.getElementById("ui-btn").innerText = "Start Telemetry Logging";
       document.getElementById("ui-btn").classList.remove("stop");
@@ -433,41 +550,49 @@
       const parts = raw.split(",");
       if (parts.length < 3) return;
 
+      if (myLat === null || myLng === null) {
+        document.getElementById("ui-status").innerText = "Skipped: Awaiting GPS accuracy";
+        return;
+      }
+
       const anomalyType = parts[0].trim();
       const severity = parts[1].trim();
       const gforce = parseFloat(parts[2]) || 0;
 
-      const targetLat = (myLat !== null) ? myLat : 18.4883;
-      const targetLng = (myLng !== null) ? myLng : 73.9449;
+      const recordPayload = {
+        type: anomalyType,
+        color: severity,
+        gforce: gforce,
+        lat: myLat,
+        lng: myLng
+      };
+
+      if (!navigator.onLine) {
+        queuePayloadLocally(recordPayload);
+        return;
+      }
 
       document.getElementById("ui-badge").className = "badge recording";
       document.getElementById("ui-badge").innerText = "RECORDING";
-      document.getElementById("ui-status").innerText = `Logging: ${anomalyType} (${gforce.toFixed(2)}g)`;
+      document.getElementById("ui-status").innerText = `Logged: ${anomalyType} (${gforce.toFixed(2)}g)`;
 
       try {
         await fetch(GOOGLE_SCRIPT_URL, {
           method: "POST",
           mode: "no-cors",
           headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify({
-            type: anomalyType,
-            color: severity,
-            gforce: gforce,
-            lat: targetLat,
-            lng: targetLng
-          })
+          body: JSON.stringify(recordPayload)
         });
 
         setTimeout(() => {
           if (isLogging) {
             document.getElementById("ui-badge").className = "badge active";
             document.getElementById("ui-badge").innerText = "TRACKING";
-            document.getElementById("ui-status").innerText = `Uploaded: ${anomalyType} to Sheet`;
             loadSheetData();
           }
         }, 1800);
       } catch (err) {
-        if (isLogging) document.getElementById("ui-status").innerText = "Sheet POST error";
+        queuePayloadLocally(recordPayload);
       }
     }
 
@@ -478,6 +603,93 @@
       return currentTheme === "dark" ? "#ffd60a" : "#ffcc00";
     }
 
+    function renderProcessedMarkers() {
+      if (!cachedRawRows || cachedRawRows.length === 0) return;
+
+      const zoom = map.getZoom();
+      const precision = zoom <= 11 ? 2 : zoom <= 13 ? 3 : 4;
+      const clusters = {};
+      const validPoints = [];
+
+      cachedRawRows.forEach(r => {
+        const keys = Object.keys(r);
+        const latKey = keys.find(k => /^(lat|latitude)/i.test(k.trim()));
+        const lngKey = keys.find(k => /^(lon|lng|longitude)/i.test(k.trim()));
+        const gKey = keys.find(k => /(g_force|gforce|force)/i.test(k.trim()));
+        const sevKey = keys.find(k => /(severity|color)/i.test(k.trim()));
+        const typeKey = keys.find(k => /type/i.test(k.trim()));
+
+        let rawVal1 = latKey ? parseFloat(r[latKey]) : NaN;
+        let rawVal2 = lngKey ? parseFloat(r[lngKey]) : NaN;
+
+        if (isNaN(rawVal1) || isNaN(rawVal2) || rawVal1 === 0 || rawVal2 === 0) return;
+
+        let actualLat = rawVal1 > 50.0 && rawVal2 < 30.0 ? rawVal2 : rawVal1;
+        let actualLng = rawVal1 > 50.0 && rawVal2 < 30.0 ? rawVal1 : rawVal2;
+
+        if (actualLat < 8.0 || actualLat > 37.0 || actualLng < 68.0 || actualLng > 98.0) return;
+
+        const gridKey = actualLat.toFixed(precision) + "_" + actualLng.toFixed(precision);
+
+        if (!clusters[gridKey]) {
+          clusters[gridKey] = {
+            lat: actualLat,
+            lng: actualLng,
+            count: 0,
+            maxG: 0,
+            severity: (sevKey && r[sevKey]) ? r[sevKey] : "YELLOW",
+            type: (typeKey && r[typeKey]) ? r[typeKey] : "POTHOLE"
+          };
+        }
+
+        clusters[gridKey].count += 1;
+        const force = gKey ? (parseFloat(r[gKey]) || 0) : 0;
+        if (force > clusters[gridKey].maxG) {
+          clusters[gridKey].maxG = force;
+          if (sevKey && r[sevKey]) clusters[gridKey].severity = r[sevKey];
+          if (typeKey && r[typeKey]) clusters[gridKey].type = r[typeKey];
+        }
+
+        validPoints.push([actualLat, actualLng]);
+      });
+
+      layerGroup.clearLayers();
+
+      Object.values(clusters).forEach(item => {
+        const cColor = getColor(item.severity);
+        const baseRadius = zoom <= 11 ? 4 : zoom <= 13 ? 6 : 8;
+        const markerRadius = Math.min(baseRadius + Math.log2(item.count + 1) * 1.5, 16);
+
+        const circle = L.circleMarker([item.lat, item.lng], {
+          radius: markerRadius,
+          color: currentTheme === "dark" ? "#ffffff" : cColor,
+          weight: currentTheme === "dark" ? 1 : 0.8,
+          fillColor: cColor,
+          fillOpacity: zoom <= 11 ? 0.65 : 0.85
+        });
+
+        circle.bindPopup(`
+          <div style="font-size:13px; line-height:1.5;">
+            <b style="font-size:14px;">${item.type}</b><br/>
+            Reports in Zone: ${item.count}<br/>
+            Peak Force: ${item.maxG.toFixed(2)} g<br/>
+            Severity: <b style="color:${cColor}">${item.severity}</b>
+          </div>
+        `);
+
+        circle.addTo(layerGroup);
+      });
+
+      if (!mapInitialFocus && validPoints.length > 0) {
+        map.fitBounds(validPoints, { padding: [50, 50], maxZoom: 14 });
+        mapInitialFocus = true;
+      }
+
+      document.getElementById("stat-spots").innerText = Object.keys(clusters).length;
+    }
+
+    map.on('zoomend', renderProcessedMarkers);
+
     function loadSheetData() {
       const queryUrl = CSV_URL + '&nocache=' + new Date().getTime();
 
@@ -486,94 +698,8 @@
         header: true,
         skipEmptyLines: true,
         complete: function(res) {
-          const rows = res.data;
-          if (!rows || rows.length === 0) {
-            document.getElementById("stat-spots").innerText = "0";
-            return;
-          }
-
-          const clusters = {};
-          const validPoints = [];
-
-          rows.forEach(r => {
-            const keys = Object.keys(r);
-            const latKey = keys.find(k => /^(lat|latitude)/i.test(k.trim()));
-            const lngKey = keys.find(k => /^(lon|lng|longitude)/i.test(k.trim()));
-            const gKey = keys.find(k => /(g_force|gforce|force)/i.test(k.trim()));
-            const sevKey = keys.find(k => /(severity|color)/i.test(k.trim()));
-            const typeKey = keys.find(k => /type/i.test(k.trim()));
-
-            let rawVal1 = latKey ? parseFloat(r[latKey]) : NaN;
-            let rawVal2 = lngKey ? parseFloat(r[lngKey]) : NaN;
-
-            if (isNaN(rawVal1) || isNaN(rawVal2) || rawVal1 === 0 || rawVal2 === 0) return;
-
-            let actualLat, actualLng;
-            if (rawVal1 > 50.0 && rawVal2 < 30.0) {
-              actualLat = rawVal2;
-              actualLng = rawVal1;
-            } else {
-              actualLat = rawVal1;
-              actualLng = rawVal2;
-            }
-
-            if (actualLat < 8.0 || actualLat > 37.0 || actualLng < 68.0 || actualLng > 98.0) return;
-
-            const gridKey = actualLat.toFixed(4) + "_" + actualLng.toFixed(4);
-
-            if (!clusters[gridKey]) {
-              clusters[gridKey] = {
-                lat: actualLat,
-                lng: actualLng,
-                count: 0,
-                maxG: 0,
-                severity: (sevKey && r[sevKey]) ? r[sevKey] : "YELLOW",
-                type: (typeKey && r[typeKey]) ? r[typeKey] : "POTHOLE"
-              };
-            }
-
-            clusters[gridKey].count += 1;
-            const force = gKey ? (parseFloat(r[gKey]) || 0) : 0;
-            if (force > clusters[gridKey].maxG) {
-              clusters[gridKey].maxG = force;
-              if (sevKey && r[sevKey]) clusters[gridKey].severity = r[sevKey];
-              if (typeKey && r[typeKey]) clusters[gridKey].type = r[typeKey];
-            }
-
-            validPoints.push([actualLat, actualLng]);
-          });
-
-          layerGroup.clearLayers();
-
-          Object.values(clusters).forEach(item => {
-            const cColor = getColor(item.severity);
-
-            const circle = L.circleMarker([item.lat, item.lng], {
-              radius: Math.min(5 + item.count, 12),
-              color: cColor,
-              weight: currentTheme === "dark" ? 2 : 1.5,
-              fillColor: cColor,
-              fillOpacity: currentTheme === "dark" ? 0.9 : 0.8
-            });
-
-            circle.bindPopup(`
-              <div style="font-size:13px; line-height:1.5;">
-                <b style="font-size:14px;">${item.type}</b><br/>
-                Reports: ${item.count}<br/>
-                Max Force: ${item.maxG.toFixed(2)} g<br/>
-                Severity: <b style="color:${cColor}">${item.severity}</b>
-              </div>
-            `);
-
-            circle.addTo(layerGroup);
-          });
-
-          if (!mapInitialFocus && validPoints.length > 0) {
-            map.fitBounds(validPoints, { padding: [50, 50], maxZoom: 15 });
-            mapInitialFocus = true;
-          }
-
-          document.getElementById("stat-spots").innerText = Object.keys(clusters).length;
+          cachedRawRows = res.data || [];
+          renderProcessedMarkers();
         }
       });
     }
