@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-  <title>RoadPulse — Road Condition Map</title>
+  <title>RoadPulse — Road Surface Monitor</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     :root {
@@ -16,10 +16,9 @@
       --stat-box-bg: rgba(255, 255, 255, 0.08);
       --badge-bg: rgba(255, 255, 255, 0.12);
       --badge-color: #d1d1d6;
-      --status-color: #aeaeb2;
       --btn-primary: #0a84ff;
       --btn-text: #ffffff;
-      --popup-bg: rgba(30, 30, 32, 0.95);
+      --popup-bg: rgba(24, 24, 26, 0.95);
       --popup-text: #f5f5f7;
     }
 
@@ -69,6 +68,7 @@
       font-size: 15px;
       font-weight: 700;
       color: var(--text-primary);
+      letter-spacing: -0.2px;
     }
 
     .badge {
@@ -78,6 +78,7 @@
       border-radius: 12px;
       background: var(--badge-bg);
       color: var(--badge-color);
+      transition: all 0.3s ease;
     }
 
     .badge.active {
@@ -96,6 +97,11 @@
       background: var(--btn-primary);
       color: var(--btn-text);
       cursor: pointer;
+      transition: opacity 0.2s, background-color 0.2s;
+    }
+
+    .btn-action:active {
+      opacity: 0.75;
     }
 
     .btn-action.stop {
@@ -130,30 +136,48 @@
       margin-top: 2px;
     }
 
-    .hazard-badge {
+    /* Precision Luminescent Glow Nodes */
+    .glow-wrapper {
+      position: relative;
+      width: 28px;
+      height: 28px;
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-      border: 2px solid #ffffff;
-      font-size: 14px;
       cursor: pointer;
-      transition: transform 0.2s;
     }
 
-    .hazard-badge:hover {
-      transform: scale(1.15);
+    .glow-core {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      transition: transform 0.2s ease;
     }
 
-    .hazard-badge.severe {
-      background: #ff3b30;
+    .glow-core.severe {
+      background-color: #ffffff;
+      border: 1.5px solid #ff453a;
+      box-shadow: 0 0 8px 3px #ff3b30, 0 0 16px 6px rgba(255, 69, 58, 0.45);
+      animation: pulse-red 1.8s infinite alternate ease-in-out;
     }
 
-    .hazard-badge.moderate {
-      background: #ff9500;
+    .glow-core.moderate {
+      background-color: #ffffff;
+      border: 1.5px solid #ff9f0a;
+      box-shadow: 0 0 6px 2px #ff9500, 0 0 12px 4px rgba(255, 159, 10, 0.4);
+    }
+
+    .glow-wrapper:hover .glow-core {
+      transform: scale(1.4);
+    }
+
+    @keyframes pulse-red {
+      0% {
+        box-shadow: 0 0 6px 2px #ff3b30, 0 0 10px 4px rgba(255, 69, 58, 0.4);
+      }
+      100% {
+        box-shadow: 0 0 12px 4px #ff3b30, 0 0 20px 8px rgba(255, 69, 58, 0.65);
+      }
     }
 
     .leaflet-popup-content-wrapper {
@@ -161,7 +185,11 @@
       background: var(--popup-bg) !important;
       color: var(--popup-text) !important;
       border: 1px solid var(--card-border);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35) !important;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.6) !important;
+    }
+
+    .leaflet-popup-tip {
+      background: var(--popup-bg) !important;
     }
   </style>
 </head>
@@ -173,7 +201,7 @@
 
   <div class="ios-card">
     <div class="card-header">
-      <div class="title">Road Health Live</div>
+      <div class="title">RoadPulse Stream</div>
       <span id="ui-badge" class="badge">VIEWER</span>
     </div>
 
@@ -183,11 +211,11 @@
 
     <div class="stats-grid">
       <div class="stat-box">
-        <div class="stat-label">Critical Hazards</div>
+        <div class="stat-label">Critical Spots</div>
         <div id="stat-hazards" class="stat-val" style="color: #ff453a;">0</div>
       </div>
       <div class="stat-box">
-        <div class="stat-label">Road Health</div>
+        <div class="stat-label">Road Condition</div>
         <div id="stat-health" class="stat-val" style="color: #30d158;">Good</div>
       </div>
     </div>
@@ -204,7 +232,7 @@
     const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvD2getclUw9lsCQXftP9oH4vFP8Yx9cEJe91JDXxq5p0Pz05WTGUFogtAbs5fpaW8Yj8gdIMOCrk4/pub?output=csv";
     const BLYNK_TOKEN = "k53JqlD8pCz-0Z_ixoqYMSyMgkMVN-pw";
 
-    const map = L.map('map', { zoomControl: false }).setView([18.50, 73.88], 12);
+    const map = L.map('map', { zoomControl: false, preferCanvas: true }).setView([18.50, 73.88], 12);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -213,7 +241,7 @@
     }).addTo(map);
 
     let heatLayer = null;
-    const badgeLayer = L.layerGroup().addTo(map);
+    const coreLayer = L.layerGroup().addTo(map);
 
     let isLogging = false;
     let myLat = null;
@@ -311,7 +339,7 @@
           if (!rows || rows.length === 0) return;
 
           const heatData = [];
-          const criticalHazards = [];
+          const hotSpots = [];
           let severeCount = 0;
 
           rows.forEach(r => {
@@ -320,6 +348,8 @@
             const lngKey = keys.find(k => /^(lon|lng|longitude)/i.test(k.trim()));
             const gKey = keys.find(k => /(g_force|gforce|force)/i.test(k.trim()));
             const sevKey = keys.find(k => /(severity|color)/i.test(k.trim()));
+            const typeKey = keys.find(k => /type/i.test(k.trim()));
+            const timeKey = keys.find(k => /(time|timestamp|date)/i.test(k.trim()));
 
             let r1 = latKey ? parseFloat(r[latKey]) : NaN;
             let r2 = lngKey ? parseFloat(r[lngKey]) : NaN;
@@ -331,59 +361,68 @@
 
             const force = gKey ? (parseFloat(r[gKey]) || 0) : 0;
             const sev = (sevKey && r[sevKey]) ? r[sevKey].toUpperCase() : "YELLOW";
+            const typ = (typeKey && r[typeKey]) ? r[typeKey] : "POTHOLE";
+            const tme = (timeKey && r[timeKey]) ? r[timeKey] : "";
 
-            const intensity = sev === "RED" ? 1.0 : sev === "ORANGE" ? 0.6 : 0.25;
+            const intensity = sev === "RED" ? 1.0 : sev === "ORANGE" ? 0.65 : 0.35;
             heatData.push([lat, lng, intensity]);
 
             if (sev === "RED" || sev === "ORANGE") {
               if (sev === "RED") severeCount++;
-              criticalHazards.push({ lat, lng, severity: sev, force });
+              hotSpots.push({ lat, lng, severity: sev, force, type: typ, time: tme });
             }
           });
 
+          // Precision Thinned Heat Corridor
           if (heatLayer) map.removeLayer(heatLayer);
           heatLayer = L.heatLayer(heatData, {
-            radius: 20,
-            blur: 18,
-            maxZoom: 16,
+            radius: 9,
+            blur: 11,
+            maxZoom: 17,
             max: 1.0,
             gradient: {
-              0.2: '#ffd60a',
-              0.55: '#ff9f0a',
+              0.25: '#ffd60a',
+              0.60: '#ff9f0a',
               0.85: '#ff453a'
             }
           }).addTo(map);
 
-          badgeLayer.clearLayers();
-          criticalHazards.forEach(h => {
+          // Subtle Luminous Cores
+          coreLayer.clearLayers();
+          hotSpots.forEach(h => {
             const isRed = h.severity === "RED";
-            const iconHtml = `<div class="hazard-badge ${isRed ? 'severe' : 'moderate'}">⚠️</div>`;
-            const customIcon = L.divIcon({
-              className: 'custom-hazard-icon',
+            const iconHtml = `
+              <div class="glow-wrapper">
+                <div class="glow-core ${isRed ? 'severe' : 'moderate'}"></div>
+              </div>
+            `;
+
+            const glowIcon = L.divIcon({
+              className: '',
               html: iconHtml,
               iconSize: [28, 28],
               iconAnchor: [14, 14]
             });
 
-            L.marker([h.lat, h.lng], { icon: customIcon })
+            L.marker([h.lat, h.lng], { icon: glowIcon })
               .bindPopup(`
-                <div style="font-size:13px; line-height:1.4;">
+                <div style="font-size:13px; line-height:1.5;">
                   <b style="font-size:14px; color:${isRed ? '#ff453a' : '#ff9f0a'};">
-                    ${isRed ? 'Severe Damage Zone' : 'Moderate Road Hazard'}
+                    ${h.type} (${h.severity})
                   </b><br/>
-                  Impact: <b>${h.force.toFixed(2)}G</b><br/>
-                  Action: Repair Inspection Recommended
+                  Peak Impact: <b>${h.force.toFixed(2)}G</b><br/>
+                  ${h.time ? `<span style="color:var(--text-secondary); font-size:11px;">${h.time}</span>` : ''}
                 </div>
               `)
-              .addTo(badgeLayer);
+              .addTo(coreLayer);
           });
 
-          document.getElementById("stat-hazards").innerText = criticalHazards.length;
+          document.getElementById("stat-hazards").innerText = hotSpots.length;
           const healthEl = document.getElementById("stat-health");
           if (severeCount > 5) {
             healthEl.innerText = "Poor";
             healthEl.style.color = "#ff453a";
-          } else if (criticalHazards.length > 8) {
+          } else if (hotSpots.length > 8) {
             healthEl.innerText = "Degraded";
             healthEl.style.color = "#ff9f0a";
           } else {
