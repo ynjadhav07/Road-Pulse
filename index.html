@@ -224,17 +224,18 @@
       color: var(--text-secondary);
     }
 
-    .dot {
+    .line-indicator {
       display: inline-block;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
+      width: 12px;
+      height: 3px;
+      border-radius: 2px;
       margin-right: 4px;
+      vertical-align: middle;
     }
 
-    .dot.red { background: #ff3b30; }
-    .dot.orange { background: #ff9500; }
-    .dot.yellow { background: #ffcc00; }
+    .line-indicator.red { background: #ff3b30; }
+    .line-indicator.orange { background: #ff9500; }
+    .line-indicator.yellow { background: #ffd60a; }
 
     .leaflet-popup-content-wrapper {
       border-radius: 14px !important;
@@ -295,7 +296,7 @@
         <div id="stat-lng" class="stat-val">--.----</div>
       </div>
       <div class="stat-box">
-        <div class="stat-label">Spots</div>
+        <div class="stat-label">Samples</div>
         <div id="stat-spots" class="stat-val">0</div>
       </div>
       <div class="stat-box">
@@ -304,12 +305,12 @@
       </div>
     </div>
 
-    <div id="ui-status" class="status-text">Public map active. Tap circle for data.</div>
+    <div id="ui-status" class="status-text">Zoom in (15+) to reveal micro hazard dots.</div>
 
     <div class="legend-bar">
-      <span><span class="dot red"></span>Severe</span>
-      <span><span class="dot orange"></span>Moderate</span>
-      <span><span class="dot yellow"></span>Minor</span>
+      <span><span class="line-indicator red"></span>Severe &gt;2.6G</span>
+      <span><span class="line-indicator orange"></span>Mod ~2.0G</span>
+      <span><span class="line-indicator yellow"></span>Minor</span>
     </div>
   </div>
 
@@ -335,18 +336,22 @@
       attribution: '&copy; OpenStreetMap'
     }).addTo(map);
 
-    const layerGroup = L.layerGroup().addTo(map);
+    const traceLayerGroup = L.layerGroup().addTo(map);
+    const pinLayerGroup = L.layerGroup().addTo(map);
+    const microDotLayerGroup = L.layerGroup().addTo(map);
 
     let isLogging = false;
     let myLat = null;
     let myLng = null;
+    let smoothLat = null;
+    let smoothLng = null;
     let lastBlynkPayload = "";
     let watchId = null;
     let blynkPollTimer = null;
     let mapInitialFocus = false;
     let wakeLock = null;
     let isFlushingQueue = false;
-    let cachedRawRows = [];
+    let globalCleanPoints = [];
 
     const audioEngine = document.getElementById("bg-audio-engine");
 
@@ -432,7 +437,7 @@
       document.documentElement.setAttribute("data-theme", currentTheme);
       localStorage.setItem("roadpulse_theme", currentTheme);
       applyThemeUI(currentTheme);
-      renderProcessedMarkers();
+      renderLayers();
     }
 
     applyThemeUI(currentTheme);
@@ -485,8 +490,25 @@
       if (navigator.geolocation) {
         watchId = navigator.geolocation.watchPosition(
           (pos) => {
-            myLat = pos.coords.latitude;
-            myLng = pos.coords.longitude;
+            if (pos.coords.accuracy > 25) {
+              document.getElementById("ui-status").innerText = `Filtering noisy GPS (${Math.round(pos.coords.accuracy)}m)`;
+              return;
+            }
+
+            const rawLat = pos.coords.latitude;
+            const rawLng = pos.coords.longitude;
+
+            if (smoothLat === null || smoothLng === null) {
+              smoothLat = rawLat;
+              smoothLng = rawLng;
+            } else {
+              smoothLat = smoothLat * 0.65 + rawLat * 0.35;
+              smoothLng = smoothLng * 0.65 + rawLng * 0.35;
+            }
+
+            myLat = smoothLat;
+            myLng = smoothLng;
+
             document.getElementById("stat-lat").innerText = myLat.toFixed(4);
             document.getElementById("stat-lng").innerText = myLng.toFixed(4);
           },
@@ -520,6 +542,8 @@
       document.getElementById("ui-status").innerText = "Session stopped.";
       document.getElementById("stat-lat").innerText = "--.----";
       document.getElementById("stat-lng").innerText = "--.----";
+      smoothLat = null;
+      smoothLng = null;
     }
 
     async function checkBlynk() {
@@ -551,7 +575,7 @@
       if (parts.length < 3) return;
 
       if (myLat === null || myLng === null) {
-        document.getElementById("ui-status").innerText = "Skipped: Awaiting GPS accuracy";
+        document.getElementById("ui-status").innerText = "Skipped: Awaiting clean road lock";
         return;
       }
 
@@ -596,99 +620,108 @@
       }
     }
 
-    function getColor(s) {
-      const val = (s || "").toUpperCase().trim();
-      if (val === "RED") return currentTheme === "dark" ? "#ff453a" : "#ff3b30";
-      if (val === "ORANGE") return currentTheme === "dark" ? "#ff9f0a" : "#ff9500";
+    function getTelemetryColor(gforce, severity) {
+      const s = (severity || "").toUpperCase().trim();
+      if (gforce >= 2.6 || s === "RED") return currentTheme === "dark" ? "#ff453a" : "#ff3b30";
+      if (gforce >= 2.0 || s === "ORANGE") return currentTheme === "dark" ? "#ff9f0a" : "#ff9500";
       return currentTheme === "dark" ? "#ffd60a" : "#ffcc00";
     }
 
-    function renderProcessedMarkers() {
-      if (!cachedRawRows || cachedRawRows.length === 0) return;
+    function renderLayers() {
+      traceLayerGroup.clearLayers();
+      pinLayerGroup.clearLayers();
+      microDotLayerGroup.clearLayers();
+
+      const points = globalCleanPoints;
+      if (!points || points.length === 0) return;
 
       const zoom = map.getZoom();
-      const precision = zoom <= 11 ? 2 : zoom <= 13 ? 3 : 4;
-      const clusters = {};
-      const validPoints = [];
 
-      cachedRawRows.forEach(r => {
-        const keys = Object.keys(r);
-        const latKey = keys.find(k => /^(lat|latitude)/i.test(k.trim()));
-        const lngKey = keys.find(k => /^(lon|lng|longitude)/i.test(k.trim()));
-        const gKey = keys.find(k => /(g_force|gforce|force)/i.test(k.trim()));
-        const sevKey = keys.find(k => /(severity|color)/i.test(k.trim()));
-        const typeKey = keys.find(k => /type/i.test(k.trim()));
+      for (let i = 0; i < points.length - 1; i++) {
+        const p1 = points[i];
+        const p2 = points[i + 1];
 
-        let rawVal1 = latKey ? parseFloat(r[latKey]) : NaN;
-        let rawVal2 = lngKey ? parseFloat(r[lngKey]) : NaN;
+        const dLat = p1.lat - p2.lat;
+        const dLng = p1.lng - p2.lng;
+        if (dLat * dLat + dLng * dLng > 0.05) continue;
 
-        if (isNaN(rawVal1) || isNaN(rawVal2) || rawVal1 === 0 || rawVal2 === 0) return;
+        const segPeakForce = Math.max(p1.gforce, p2.gforce);
+        const segSev = (p1.severity === "RED" || p2.severity === "RED") ? "RED" :
+                       (p1.severity === "ORANGE" || p2.severity === "ORANGE") ? "ORANGE" : "YELLOW";
 
-        let actualLat = rawVal1 > 50.0 && rawVal2 < 30.0 ? rawVal2 : rawVal1;
-        let actualLng = rawVal1 > 50.0 && rawVal2 < 30.0 ? rawVal1 : rawVal2;
+        const strokeColor = getTelemetryColor(segPeakForce, segSev);
+        const strokeWidth = segSev === "RED" ? 5.5 : segSev === "ORANGE" ? 4 : 2.5;
 
-        if (actualLat < 8.0 || actualLat > 37.0 || actualLng < 68.0 || actualLng > 98.0) return;
-
-        const gridKey = actualLat.toFixed(precision) + "_" + actualLng.toFixed(precision);
-
-        if (!clusters[gridKey]) {
-          clusters[gridKey] = {
-            lat: actualLat,
-            lng: actualLng,
-            count: 0,
-            maxG: 0,
-            severity: (sevKey && r[sevKey]) ? r[sevKey] : "YELLOW",
-            type: (typeKey && r[typeKey]) ? r[typeKey] : "POTHOLE"
-          };
-        }
-
-        clusters[gridKey].count += 1;
-        const force = gKey ? (parseFloat(r[gKey]) || 0) : 0;
-        if (force > clusters[gridKey].maxG) {
-          clusters[gridKey].maxG = force;
-          if (sevKey && r[sevKey]) clusters[gridKey].severity = r[sevKey];
-          if (typeKey && r[typeKey]) clusters[gridKey].type = r[typeKey];
-        }
-
-        validPoints.push([actualLat, actualLng]);
-      });
-
-      layerGroup.clearLayers();
-
-      Object.values(clusters).forEach(item => {
-        const cColor = getColor(item.severity);
-        const baseRadius = zoom <= 11 ? 4 : zoom <= 13 ? 6 : 8;
-        const markerRadius = Math.min(baseRadius + Math.log2(item.count + 1) * 1.5, 16);
-
-        const circle = L.circleMarker([item.lat, item.lng], {
-          radius: markerRadius,
-          color: currentTheme === "dark" ? "#ffffff" : cColor,
-          weight: currentTheme === "dark" ? 1 : 0.8,
-          fillColor: cColor,
-          fillOpacity: zoom <= 11 ? 0.65 : 0.85
+        const segment = L.polyline([[p1.lat, p1.lng], [p2.lat, p2.lng]], {
+          color: strokeColor,
+          weight: strokeWidth,
+          opacity: currentTheme === "dark" ? 0.95 : 0.85,
+          lineCap: "round",
+          lineJoin: "round"
         });
 
-        circle.bindPopup(`
+        segment.bindPopup(`
           <div style="font-size:13px; line-height:1.5;">
-            <b style="font-size:14px;">${item.type}</b><br/>
-            Reports in Zone: ${item.count}<br/>
-            Peak Force: ${item.maxG.toFixed(2)} g<br/>
-            Severity: <b style="color:${cColor}">${item.severity}</b>
+            <b style="font-size:14px;">Telemetry Vector</b><br/>
+            Peak Force: ${segPeakForce.toFixed(2)} g<br/>
+            Severity: <b style="color:${strokeColor}">${segSev}</b>
           </div>
         `);
 
-        circle.addTo(layerGroup);
-      });
-
-      if (!mapInitialFocus && validPoints.length > 0) {
-        map.fitBounds(validPoints, { padding: [50, 50], maxZoom: 14 });
-        mapInitialFocus = true;
+        segment.addTo(traceLayerGroup);
       }
 
-      document.getElementById("stat-spots").innerText = Object.keys(clusters).length;
+      points.forEach(pt => {
+        const isSevere = pt.severity === "RED" || pt.gforce >= 2.6;
+        const isModerate = pt.severity === "ORANGE" || (pt.gforce >= 2.0 && pt.gforce < 2.6);
+
+        if (isSevere || isModerate) {
+          const markerColor = getTelemetryColor(pt.gforce, pt.severity);
+          const markerRadius = isSevere ? 7 : 5;
+
+          const pin = L.circleMarker([pt.lat, pt.lng], {
+            radius: markerRadius,
+            color: "#ffffff",
+            weight: 1.5,
+            fillColor: markerColor,
+            fillOpacity: 1
+          });
+
+          pin.bindPopup(`
+            <div style="font-size:13px; line-height:1.5;">
+              <b style="font-size:14px;">${pt.type}</b><br/>
+              Force: ${pt.gforce.toFixed(2)} g<br/>
+              Severity: <b style="color:${markerColor}">${pt.severity}</b><br/>
+              Time: ${pt.time || "N/A"}
+            </div>
+          `);
+
+          pin.addTo(pinLayerGroup);
+        }
+
+        if (zoom >= 15) {
+          const dotColor = getTelemetryColor(pt.gforce, pt.severity);
+          const dot = L.circleMarker([pt.lat, pt.lng], {
+            radius: pt.severity === "YELLOW" ? 3 : 4,
+            color: "#ffffff",
+            weight: 0.8,
+            fillColor: dotColor,
+            fillOpacity: 0.85
+          });
+
+          dot.bindPopup(`
+            <div style="font-size:12px; line-height:1.4;">
+              <b>${pt.type}</b> (${pt.severity})<br/>
+              Force: ${pt.gforce.toFixed(2)} g
+            </div>
+          `);
+
+          dot.addTo(microDotLayerGroup);
+        }
+      });
     }
 
-    map.on('zoomend', renderProcessedMarkers);
+    map.on('zoomend', renderLayers);
 
     function loadSheetData() {
       const queryUrl = CSV_URL + '&nocache=' + new Date().getTime();
@@ -698,8 +731,85 @@
         header: true,
         skipEmptyLines: true,
         complete: function(res) {
-          cachedRawRows = res.data || [];
-          renderProcessedMarkers();
+          const rows = res.data;
+          if (!rows || rows.length === 0) {
+            document.getElementById("stat-spots").innerText = "0";
+            return;
+          }
+
+          const rawPoints = [];
+
+          rows.forEach(r => {
+            const keys = Object.keys(r);
+            const latKey = keys.find(k => /^(lat|latitude)/i.test(k.trim()));
+            const lngKey = keys.find(k => /^(lon|lng|longitude)/i.test(k.trim()));
+            const gKey = keys.find(k => /(g_force|gforce|force)/i.test(k.trim()));
+            const sevKey = keys.find(k => /(severity|color)/i.test(k.trim()));
+            const typeKey = keys.find(k => /type/i.test(k.trim()));
+            const timeKey = keys.find(k => /(time|timestamp|date)/i.test(k.trim()));
+
+            let rawVal1 = latKey ? parseFloat(r[latKey]) : NaN;
+            let rawVal2 = lngKey ? parseFloat(r[lngKey]) : NaN;
+
+            if (isNaN(rawVal1) || isNaN(rawVal2) || rawVal1 === 0 || rawVal2 === 0) return;
+
+            let actualLat = rawVal1 > 50.0 && rawVal2 < 30.0 ? rawVal2 : rawVal1;
+            let actualLng = rawVal1 > 50.0 && rawVal2 < 30.0 ? rawVal1 : rawVal2;
+
+            if (actualLat < 8.0 || actualLat > 37.0 || actualLng < 68.0 || actualLng > 98.0) return;
+
+            rawPoints.push({
+              lat: actualLat,
+              lng: actualLng,
+              gforce: gKey ? (parseFloat(r[gKey]) || 0) : 0,
+              severity: sevKey ? r[sevKey] : "YELLOW",
+              type: typeKey ? r[typeKey] : "POTHOLE",
+              time: timeKey ? r[timeKey] : ""
+            });
+          });
+
+          if (rawPoints.length === 0) {
+            document.getElementById("stat-spots").innerText = "0";
+            return;
+          }
+
+          const filteredPoints = [];
+          let curLat = rawPoints[0].lat;
+          let curLng = rawPoints[0].lng;
+
+          rawPoints.forEach((p, idx) => {
+            if (idx > 0) {
+              const prev = rawPoints[idx - 1];
+              const dLat = p.lat - prev.lat;
+              const dLng = p.lng - prev.lng;
+              if (dLat * dLat + dLng * dLng > 0.0025) {
+                curLat = p.lat;
+                curLng = p.lng;
+              } else {
+                curLat = curLat * 0.7 + p.lat * 0.3;
+                curLng = curLng * 0.7 + p.lng * 0.3;
+              }
+            }
+            filteredPoints.push({
+              lat: curLat,
+              lng: curLng,
+              gforce: p.gforce,
+              severity: p.severity,
+              type: p.type,
+              time: p.time
+            });
+          });
+
+          globalCleanPoints = filteredPoints;
+          renderLayers();
+
+          if (!mapInitialFocus && filteredPoints.length > 0) {
+            const bounds = filteredPoints.map(p => [p.lat, p.lng]);
+            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+            mapInitialFocus = true;
+          }
+
+          document.getElementById("stat-spots").innerText = filteredPoints.length;
         }
       });
     }
