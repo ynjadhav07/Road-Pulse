@@ -2,25 +2,25 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-  <title>RoadPulse Telemetry — Snapped Defect Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+  <title>RoadPulse Telemetry — Discrete Defect Map</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     :root {
-      --bg-canvas: #111113;
-      --card-bg: rgba(26, 26, 28, 0.90);
+      --bg-canvas: #0c0c0e;
+      --card-bg: rgba(24, 24, 28, 0.82);
       --card-border: rgba(255, 255, 255, 0.12);
-      --card-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
+      --card-shadow: 0 14px 40px rgba(0, 0, 0, 0.65);
       --text-primary: #f5f5f7;
-      --text-secondary: #98989d;
+      --text-secondary: #98989f;
       --stat-box-bg: rgba(255, 255, 255, 0.06);
-      --border-separator: rgba(255, 255, 255, 0.1);
       --badge-bg: rgba(255, 255, 255, 0.12);
       --badge-color: #d1d1d6;
       --btn-primary: #0a84ff;
       --btn-text: #ffffff;
-      --popup-bg: rgba(28, 28, 30, 0.95);
-      --popup-text: #f5f5f7;
+      --severe-color: #ff453a;
+      --moderate-color: #ff9f0a;
+      --minor-color: #ffd60a;
     }
 
     [data-theme="dark"] .leaflet-tile-pane {
@@ -38,187 +38,258 @@
       width: 100%;
       height: 100%;
       background-color: var(--bg-canvas);
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, sans-serif;
       overflow: hidden;
     }
 
-    .top-dashboard {
-      position: absolute;
+    /* Move Leaflet controls out of the bottom bar's way */
+    .leaflet-top.leaflet-right {
       top: 14px;
-      left: 12px;
       right: 12px;
-      max-width: 410px;
-      margin: 0 auto;
+    }
+    .leaflet-bar {
+      border: 1px solid var(--card-border) !important;
+      border-radius: 12px !important;
+      overflow: hidden;
+      box-shadow: var(--card-shadow) !important;
+    }
+    .leaflet-bar a {
+      background: var(--card-bg) !important;
+      color: var(--text-primary) !important;
+      border-bottom: 1px solid var(--card-border) !important;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+
+    /* Compact Top Island */
+    .top-island {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      right: 60px; /* Leaves room for zoom buttons on the right */
+      max-width: 380px;
       background: var(--card-bg);
       border: 1px solid var(--card-border);
-      border-radius: 18px;
-      padding: 14px 16px;
+      border-radius: 22px;
       box-shadow: var(--card-shadow);
       z-index: 1000;
       backdrop-filter: blur(24px);
       -webkit-backdrop-filter: blur(24px);
+      overflow: hidden;
+      transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
-    .dash-header {
+    .island-header {
       display: flex;
+      align-items: center;
       justify-content: space-between;
-      align-items: center;
-    }
-
-    .brand-title {
-      font-size: 15px;
-      font-weight: 700;
-      letter-spacing: -0.2px;
-      color: var(--text-primary);
-    }
-
-    .badge {
-      font-size: 11px;
-      font-weight: 600;
-      padding: 3px 8px;
-      border-radius: 10px;
-      background: var(--badge-bg);
-      color: var(--badge-color);
-    }
-
-    .badge.active {
-      background: rgba(10, 132, 255, 0.25);
-      color: #0a84ff;
-    }
-
-    .badge.recording {
-      background: rgba(255, 69, 58, 0.25);
-      color: #ff453a;
-    }
-
-    .filter-strip {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 5px;
-      margin-top: 12px;
-    }
-
-    .filter-chip {
-      padding: 7px 2px;
-      border-radius: 10px;
-      border: 1px solid var(--card-border);
-      background: var(--stat-box-bg);
-      color: var(--text-secondary);
-      font-size: 11px;
-      font-weight: 600;
-      text-align: center;
+      padding: 8px 12px;
       cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 2px;
-      transition: all 0.2s ease;
     }
 
-    .filter-chip .chip-count {
+    .island-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #30d158;
+      box-shadow: 0 0 8px #30d158;
+    }
+    .status-dot.tracking {
+      background: #0a84ff;
+      box-shadow: 0 0 8px #0a84ff;
+    }
+    .status-dot.recording {
+      background: #ff453a;
+      box-shadow: 0 0 10px #ff453a;
+    }
+
+    .island-title {
       font-size: 13px;
       font-weight: 700;
       color: var(--text-primary);
+      letter-spacing: -0.2px;
     }
 
-    .filter-chip.active {
-      background: rgba(255, 255, 255, 0.16);
-      border-color: rgba(255, 255, 255, 0.4);
-      color: var(--text-primary);
+    .island-count {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      background: var(--stat-box-bg);
+      padding: 2px 7px;
+      border-radius: 8px;
     }
 
-    .filter-chip.chip-red.active { background: rgba(255, 69, 58, 0.22); border-color: #ff453a; }
-    .filter-chip.chip-orange.active { background: rgba(255, 159, 10, 0.22); border-color: #ff9f0a; }
-    .filter-chip.chip-yellow.active { background: rgba(255, 214, 10, 0.22); border-color: #ffd60a; }
-
-    .btn-logger {
-      width: 100%;
-      margin-top: 10px;
-      padding: 9px;
-      font-size: 13px;
+    .island-btn {
+      padding: 6px 12px;
+      font-size: 12px;
       font-weight: 600;
       border: none;
-      border-radius: 10px;
+      border-radius: 14px;
       background: var(--btn-primary);
       color: var(--btn-text);
       cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .island-btn.stop {
+      background: #ff3b30;
     }
 
-    .btn-logger.stop { background: #ff3b30; }
+    /* Expandable Filter Tray */
+    .island-tray {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.25s ease, padding 0.25s ease;
+      padding: 0 10px;
+    }
 
-    .inspector-panel {
+    .top-island.expanded .island-tray {
+      max-height: 70px;
+      padding: 4px 10px 10px 10px;
+    }
+
+    .filter-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding-top: 8px;
+    }
+
+    .filter-pill {
+      background: var(--stat-box-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 4px 0;
+      text-align: center;
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 10px;
+      font-weight: 600;
+      transition: all 0.15s ease;
+    }
+    .filter-pill .num {
+      font-size: 12px;
+      font-weight: 700;
+      display: block;
+      color: var(--text-primary);
+    }
+    .filter-pill.active {
+      background: rgba(255, 255, 255, 0.18);
+      border-color: rgba(255, 255, 255, 0.4);
+    }
+    .filter-pill.f-red.active { border-color: var(--severe-color); background: rgba(255, 69, 58, 0.2); }
+    .filter-pill.f-orange.active { border-color: var(--moderate-color); background: rgba(255, 159, 10, 0.2); }
+    .filter-pill.f-yellow.active { border-color: var(--minor-color); background: rgba(255, 214, 10, 0.2); }
+
+    /* Modern Floating Bottom Inspector Card */
+    .inspector-card {
       position: absolute;
-      bottom: 18px;
-      left: 12px;
-      right: 12px;
-      max-width: 410px;
+      bottom: 24px;
+      left: 14px;
+      right: 14px;
+      max-width: 390px;
       margin: 0 auto;
       background: var(--card-bg);
       border: 1px solid var(--card-border);
-      border-radius: 16px;
-      padding: 12px 16px;
+      border-radius: 20px;
+      padding: 14px 16px;
       box-shadow: var(--card-shadow);
       z-index: 1000;
-      backdrop-filter: blur(24px);
-      -webkit-backdrop-filter: blur(24px);
+      backdrop-filter: blur(28px);
+      -webkit-backdrop-filter: blur(28px);
       display: none;
-      animation: slide-up 0.25s ease-out;
+      transform: translateY(12px);
+      opacity: 0;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
-    @keyframes slide-up {
-      from { transform: translateY(16px); opacity: 0; }
-      to { transform: translateY(0); opacity: 1; }
+    .inspector-card.visible {
+      display: block;
+      transform: translateY(0);
+      opacity: 1;
     }
 
-    .inspector-header {
+    .ins-top {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 6px;
+      margin-bottom: 10px;
     }
 
-    .inspector-title {
-      font-size: 14px;
-      font-weight: 700;
+    .ins-heading {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 7px;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-primary);
     }
 
-    .close-inspector {
-      background: transparent;
-      border: none;
+    .ins-tag {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .close-btn {
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--stat-box-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 50%;
       color: var(--text-secondary);
-      font-size: 18px;
+      font-size: 14px;
       cursor: pointer;
     }
 
-    .inspector-metrics {
+    .ins-metrics {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 6px;
-      margin-top: 6px;
+      grid-template-columns: 1fr 1.2fr;
+      gap: 8px;
     }
 
-    .metric-item {
+    .metric-card {
       background: var(--stat-box-bg);
-      border-radius: 8px;
-      padding: 6px;
-      text-align: center;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 8px 10px;
     }
 
-    .metric-item .m-label {
-      font-size: 9px;
+    .metric-label {
+      font-size: 10px;
+      font-weight: 600;
       color: var(--text-secondary);
       text-transform: uppercase;
-      font-weight: 600;
+      letter-spacing: 0.4px;
     }
 
-    .metric-item .m-val {
-      font-size: 13px;
+    .metric-value {
+      font-size: 16px;
       font-weight: 700;
       color: var(--text-primary);
       margin-top: 2px;
+      display: flex;
+      align-items: baseline;
+      gap: 3px;
+    }
+    .metric-value span {
+      font-size: 11px;
+      color: var(--text-secondary);
+      font-weight: 500;
     }
   </style>
 </head>
@@ -228,53 +299,60 @@
     <source src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA" type="audio/wav">
   </audio>
 
-  <div class="top-dashboard">
-    <div class="dash-header">
-      <div class="brand-title">RoadPulse Map-Matched</div>
-      <span id="ui-badge" class="badge">VIEWER</span>
-    </div>
-
-    <div class="filter-strip">
-      <button class="filter-chip active" id="filter-all" onclick="applyFilter('ALL')">
-        <span>All</span>
-        <span class="chip-count" id="count-all">0</span>
-      </button>
-      <button class="filter-chip chip-red" id="filter-red" onclick="applyFilter('RED')">
-        <span style="color:#ff453a;">Severe</span>
-        <span class="chip-count" id="count-red">0</span>
-      </button>
-      <button class="filter-chip chip-orange" id="filter-orange" onclick="applyFilter('ORANGE')">
-        <span style="color:#ff9f0a;">Moderate</span>
-        <span class="chip-count" id="count-orange">0</span>
-      </button>
-      <button class="filter-chip chip-yellow" id="filter-yellow" onclick="applyFilter('YELLOW')">
-        <span style="color:#ffd60a;">Minor</span>
-        <span class="chip-count" id="count-yellow">0</span>
+  <!-- Compact Dynamic Island Header -->
+  <div id="top-island" class="top-island">
+    <div class="island-header" onclick="toggleIslandExpand()">
+      <div class="island-left">
+        <div id="status-dot" class="status-dot"></div>
+        <div class="island-title">RoadPulse</div>
+        <div class="island-count" id="count-all">0</div>
+      </div>
+      <button id="ui-btn" class="island-btn" onclick="event.stopPropagation(); toggleLogger();">
+        Start
       </button>
     </div>
 
-    <button id="ui-btn" class="btn-logger" onclick="toggleLogger()">
-      Start Telemetry Logging
-    </button>
+    <!-- Collapsible Tray -->
+    <div class="island-tray">
+      <div class="filter-grid">
+        <div class="filter-pill active" id="filter-all" onclick="applyFilter('ALL')">
+          <span>All</span>
+          <span class="num" id="tray-all">0</span>
+        </div>
+        <div class="filter-pill f-red" id="filter-red" onclick="applyFilter('RED')">
+          <span style="color:var(--severe-color);">Severe</span>
+          <span class="num" id="count-red">0</span>
+        </div>
+        <div class="filter-pill f-orange" id="filter-orange" onclick="applyFilter('ORANGE')">
+          <span style="color:var(--moderate-color);">Mod</span>
+          <span class="num" id="count-orange">0</span>
+        </div>
+        <div class="filter-pill f-yellow" id="filter-yellow" onclick="applyFilter('YELLOW')">
+          <span style="color:var(--minor-color);">Minor</span>
+          <span class="num" id="count-yellow">0</span>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <div id="inspector" class="inspector-panel">
-    <div class="inspector-header">
-      <div class="inspector-title" id="ins-type">Pothole Alert</div>
-      <button class="close-inspector" onclick="closeInspector()">&times;</button>
+  <!-- Modern Floating Inspector Card -->
+  <div id="inspector-card" class="inspector-card">
+    <div class="ins-top">
+      <div class="ins-heading">
+        <span id="ins-dot" style="width: 8px; height: 8px; border-radius: 50%;"></span>
+        <span id="ins-type">Surface Hazard</span>
+        <span id="ins-badge" class="ins-tag">--</span>
+      </div>
+      <button class="close-btn" onclick="closeInspector()">&times;</button>
     </div>
-    <div class="inspector-metrics">
-      <div class="metric-item">
-        <div class="m-label">Impact</div>
-        <div class="m-val" id="ins-force">--</div>
+    <div class="ins-metrics">
+      <div class="metric-card">
+        <div class="metric-label">Peak G-Force</div>
+        <div class="metric-value" id="ins-force">-- <span>G</span></div>
       </div>
-      <div class="metric-item">
-        <div class="m-label">Severity</div>
-        <div class="m-val" id="ins-severity">--</div>
-      </div>
-      <div class="metric-item">
-        <div class="m-label">Time</div>
-        <div class="m-val" id="ins-time" style="font-size:11px;">--</div>
+      <div class="metric-card">
+        <div class="metric-label">Detected Time</div>
+        <div class="metric-value" id="ins-time" style="font-size: 13px;">--</div>
       </div>
     </div>
   </div>
@@ -289,8 +367,8 @@
     const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvD2getclUw9lsCQXftP9oH4vFP8Yx9cEJe91JDXxq5p0Pz05WTGUFogtAbs5fpaW8Yj8gdIMOCrk4/pub?output=csv";
     const BLYNK_TOKEN = "k53JqlD8pCz-0Z_ixoqYMSyMgkMVN-pw";
 
-    const map = L.map('map', { zoomControl: false, preferCanvas: true }).setView([18.50, 73.88], 12);
-    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    const map = L.map('map', { zoomControl: false, preferCanvas: true }).setView([18.50, 73.88], 14);
+    L.control.zoom({ position: 'topright' }).addTo(map);
 
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
@@ -314,33 +392,50 @@
 
     const audioEngine = document.getElementById("bg-audio-engine");
 
+    function toggleIslandExpand() {
+      document.getElementById("top-island").classList.toggle("expanded");
+    }
+
     function applyFilter(sev) {
       currentFilter = sev;
-      document.querySelectorAll(".filter-chip").forEach(c => c.classList.remove("active"));
+      document.querySelectorAll(".filter-pill").forEach(c => c.classList.remove("active"));
       document.getElementById("filter-" + sev.toLowerCase()).classList.add("active");
       renderCanvasMarkers();
     }
 
-    function closeInspector() {
-      document.getElementById("inspector").style.display = "none";
+    function formatFriendlyTime(raw) {
+      if (!raw) return "Just now";
+      const parts = raw.split(" ");
+      if (parts.length >= 2) {
+        return parts[1].substring(0, 5); // Returns HH:MM
+      }
+      return raw;
     }
 
     function openInspector(data) {
-      const panel = document.getElementById("inspector");
+      const panel = document.getElementById("inspector-card");
       const isRed = data.severity === "RED";
       const isOrange = data.severity === "ORANGE";
       const tagColor = isRed ? "#ff453a" : isOrange ? "#ff9f0a" : "#ffd60a";
 
-      document.getElementById("ins-type").innerHTML = `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${tagColor};"></span> ${data.type}`;
-      document.getElementById("ins-force").innerText = `${data.gforce.toFixed(2)} G`;
-      document.getElementById("ins-severity").innerText = data.severity;
-      document.getElementById("ins-severity").style.color = tagColor;
-      document.getElementById("ins-time").innerText = data.time || "Logged";
+      document.getElementById("ins-dot").style.backgroundColor = tagColor;
+      document.getElementById("ins-type").innerText = data.type;
+      
+      const badge = document.getElementById("ins-badge");
+      badge.innerText = data.severity;
+      badge.style.backgroundColor = isRed ? "rgba(255,69,58,0.2)" : isOrange ? "rgba(255,159,10,0.2)" : "rgba(255,214,10,0.2)";
+      badge.style.color = tagColor;
 
-      panel.style.display = "block";
+      document.getElementById("ins-force").innerHTML = `${data.gforce.toFixed(2)} <span>G</span>`;
+      document.getElementById("ins-time").innerText = formatFriendlyTime(data.time);
+
+      panel.classList.add("visible");
     }
 
-    // Snap-to-Road via OSRM Match API
+    function closeInspector() {
+      document.getElementById("inspector-card").classList.remove("visible");
+    }
+
     async function snapPointToRoad(lat, lng) {
       const cacheKey = `${lat.toFixed(4)}_${lng.toFixed(4)}`;
       if (snappedCache.has(cacheKey)) {
@@ -353,7 +448,6 @@
           const data = await res.json();
           if (data.waypoints && data.waypoints.length > 0) {
             const match = data.waypoints[0];
-            // If nearest road is within 35 meters, snap to it
             if (match.distance <= 35) {
               const snapped = { lat: match.location[1], lng: match.location[0] };
               snappedCache.set(cacheKey, snapped);
@@ -361,9 +455,7 @@
             }
           }
         }
-      } catch (err) {
-        // Fallback silently if offline or rate limited
-      }
+      } catch (err) {}
 
       const original = { lat, lng };
       snappedCache.set(cacheKey, original);
@@ -383,7 +475,7 @@
         const isOrange = pt.severity === "ORANGE";
 
         const strokeColor = isRed ? "#ff453a" : isOrange ? "#ff9f0a" : "#ffd60a";
-        const ringRadius = isRed ? (zoom >= 15 ? 8 : 6) : isOrange ? (zoom >= 15 ? 6 : 4.5) : (zoom >= 15 ? 4 : 3);
+        const ringRadius = isRed ? (zoom >= 16 ? 8 : 6) : isOrange ? (zoom >= 16 ? 6 : 4.5) : (zoom >= 16 ? 4 : 2.5);
         const strokeWeight = isRed ? 2.5 : isOrange ? 1.8 : 1.2;
 
         const posLat = pt.snappedLat || pt.lat;
@@ -394,7 +486,7 @@
           color: strokeColor,
           weight: strokeWeight,
           fillColor: isRed ? strokeColor : "transparent",
-          fillOpacity: isRed ? 0.4 : 0.05
+          fillOpacity: isRed ? 0.35 : 0.05
         });
 
         reticle.on('click', () => {
@@ -458,14 +550,13 @@
 
           allTelemetryPoints = points;
           document.getElementById("count-all").innerText = points.length;
+          document.getElementById("tray-all").innerText = points.length;
           document.getElementById("count-red").innerText = cRed;
           document.getElementById("count-orange").innerText = cOrange;
           document.getElementById("count-yellow").innerText = cYellow;
 
-          // Render immediate state
           renderCanvasMarkers();
 
-          // Snap unique geographic nodes asynchronously to highway geometry
           const uniqueClusters = new Map();
           points.forEach(p => {
             const key = `${p.lat.toFixed(4)}_${p.lng.toFixed(4)}`;
@@ -482,12 +573,11 @@
             });
           }
 
-          // Re-render snapped points right on the tarmac
           renderCanvasMarkers();
 
           if (!mapInitialFocus && points.length > 0) {
             const bounds = points.map(p => [p.snappedLat || p.lat, p.snappedLng || p.lng]);
-            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
             mapInitialFocus = true;
           }
         }
@@ -495,12 +585,14 @@
     }
 
     async function toggleLogger() {
+      const dot = document.getElementById("status-dot");
+      const btn = document.getElementById("ui-btn");
+
       if (!isLogging) {
         isLogging = true;
-        document.getElementById("ui-btn").innerText = "Stop Telemetry";
-        document.getElementById("ui-btn").classList.add("stop");
-        document.getElementById("ui-badge").className = "badge active";
-        document.getElementById("ui-badge").innerText = "TRACKING";
+        btn.innerText = "Stop";
+        btn.classList.add("stop");
+        dot.className = "status-dot tracking";
 
         try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
         try { audioEngine.play().catch(() => {}); } catch (e) {}
@@ -508,7 +600,6 @@
         if (navigator.geolocation) {
           watchId = navigator.geolocation.watchPosition(
             (pos) => {
-              // Strict accuracy rejection: drop anything > 20m error
               if (pos.coords.accuracy <= 20) {
                 myLat = pos.coords.latitude;
                 myLng = pos.coords.longitude;
@@ -526,10 +617,9 @@
         if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
         try { audioEngine.pause(); audioEngine.currentTime = 0; } catch (e) {}
 
-        document.getElementById("ui-btn").innerText = "Start Telemetry Logging";
-        document.getElementById("ui-btn").classList.remove("stop");
-        document.getElementById("ui-badge").className = "badge";
-        document.getElementById("ui-badge").innerText = "VIEWER";
+        btn.innerText = "Start";
+        btn.classList.remove("stop");
+        dot.className = "status-dot";
       }
     }
 
@@ -548,8 +638,8 @@
         const parts = raw.split(",");
         if (parts.length < 3) return;
 
-        document.getElementById("ui-badge").className = "badge recording";
-        document.getElementById("ui-badge").innerText = "RECORDING";
+        const dot = document.getElementById("status-dot");
+        dot.className = "status-dot recording";
 
         await fetch(GOOGLE_SCRIPT_URL, {
           method: "POST",
@@ -565,10 +655,7 @@
         });
 
         setTimeout(() => {
-          if (isLogging) {
-            document.getElementById("ui-badge").className = "badge active";
-            document.getElementById("ui-badge").innerText = "TRACKING";
-          }
+          if (isLogging) dot.className = "status-dot tracking";
           loadSheetData();
         }, 1800);
       } catch (e) {}
