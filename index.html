@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-  <title>RoadPulse Telemetry — Discrete Defect Map</title>
+  <title>RoadPulse Telemetry — Snapped Defect Map</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     :root {
@@ -42,7 +42,6 @@
       overflow: hidden;
     }
 
-    /* Top Floating Dashboard */
     .top-dashboard {
       position: absolute;
       top: 14px;
@@ -92,7 +91,6 @@
       color: #ff453a;
     }
 
-    /* Interactive Severity Pills */
     .filter-strip {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -129,20 +127,10 @@
       color: var(--text-primary);
     }
 
-    .filter-chip.chip-red.active {
-      background: rgba(255, 69, 58, 0.22);
-      border-color: #ff453a;
-    }
-    .filter-chip.chip-orange.active {
-      background: rgba(255, 159, 10, 0.22);
-      border-color: #ff9f0a;
-    }
-    .filter-chip.chip-yellow.active {
-      background: rgba(255, 214, 10, 0.22);
-      border-color: #ffd60a;
-    }
+    .filter-chip.chip-red.active { background: rgba(255, 69, 58, 0.22); border-color: #ff453a; }
+    .filter-chip.chip-orange.active { background: rgba(255, 159, 10, 0.22); border-color: #ff9f0a; }
+    .filter-chip.chip-yellow.active { background: rgba(255, 214, 10, 0.22); border-color: #ffd60a; }
 
-    /* Logger Trigger Button */
     .btn-logger {
       width: 100%;
       margin-top: 10px;
@@ -156,11 +144,8 @@
       cursor: pointer;
     }
 
-    .btn-logger.stop {
-      background: #ff3b30;
-    }
+    .btn-logger.stop { background: #ff3b30; }
 
-    /* Bottom Inspector Drawer */
     .inspector-panel {
       position: absolute;
       bottom: 18px;
@@ -206,7 +191,6 @@
       color: var(--text-secondary);
       font-size: 18px;
       cursor: pointer;
-      padding: 0 4px;
     }
 
     .inspector-metrics {
@@ -244,14 +228,12 @@
     <source src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA" type="audio/wav">
   </audio>
 
-  <!-- Top Dashboard Controls -->
   <div class="top-dashboard">
     <div class="dash-header">
-      <div class="brand-title">RoadPulse Inspector</div>
+      <div class="brand-title">RoadPulse Map-Matched</div>
       <span id="ui-badge" class="badge">VIEWER</span>
     </div>
 
-    <!-- Severity Filter Tabs -->
     <div class="filter-strip">
       <button class="filter-chip active" id="filter-all" onclick="applyFilter('ALL')">
         <span>All</span>
@@ -276,7 +258,6 @@
     </button>
   </div>
 
-  <!-- Bottom Interactive Telemetry Inspector -->
   <div id="inspector" class="inspector-panel">
     <div class="inspector-header">
       <div class="inspector-title" id="ins-type">Pothole Alert</div>
@@ -329,6 +310,7 @@
 
     let allTelemetryPoints = [];
     let currentFilter = "ALL";
+    const snappedCache = new Map();
 
     const audioEngine = document.getElementById("bg-audio-engine");
 
@@ -345,22 +327,47 @@
 
     function openInspector(data) {
       const panel = document.getElementById("inspector");
-      const typeEl = document.getElementById("ins-type");
-      const forceEl = document.getElementById("ins-force");
-      const sevEl = document.getElementById("ins-severity");
-      const timeEl = document.getElementById("ins-time");
-
       const isRed = data.severity === "RED";
       const isOrange = data.severity === "ORANGE";
       const tagColor = isRed ? "#ff453a" : isOrange ? "#ff9f0a" : "#ffd60a";
 
-      typeEl.innerHTML = `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${tagColor};"></span> ${data.type}`;
-      forceEl.innerText = `${data.gforce.toFixed(2)} G`;
-      sevEl.innerText = data.severity;
-      sevEl.style.color = tagColor;
-      timeEl.innerText = data.time || "Logged";
+      document.getElementById("ins-type").innerHTML = `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${tagColor};"></span> ${data.type}`;
+      document.getElementById("ins-force").innerText = `${data.gforce.toFixed(2)} G`;
+      document.getElementById("ins-severity").innerText = data.severity;
+      document.getElementById("ins-severity").style.color = tagColor;
+      document.getElementById("ins-time").innerText = data.time || "Logged";
 
       panel.style.display = "block";
+    }
+
+    // Snap-to-Road via OSRM Match API
+    async function snapPointToRoad(lat, lng) {
+      const cacheKey = `${lat.toFixed(4)}_${lng.toFixed(4)}`;
+      if (snappedCache.has(cacheKey)) {
+        return snappedCache.get(cacheKey);
+      }
+
+      try {
+        const res = await fetch(`https://router.project-osrm.org/nearest/v1/driving/${lng},${lat}?number=1`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.waypoints && data.waypoints.length > 0) {
+            const match = data.waypoints[0];
+            // If nearest road is within 35 meters, snap to it
+            if (match.distance <= 35) {
+              const snapped = { lat: match.location[1], lng: match.location[0] };
+              snappedCache.set(cacheKey, snapped);
+              return snapped;
+            }
+          }
+        }
+      } catch (err) {
+        // Fallback silently if offline or rate limited
+      }
+
+      const original = { lat, lng };
+      snappedCache.set(cacheKey, original);
+      return original;
     }
 
     function renderCanvasMarkers() {
@@ -370,9 +377,7 @@
       const zoom = map.getZoom();
 
       allTelemetryPoints.forEach(pt => {
-        if (currentFilter !== "ALL" && pt.severity !== currentFilter) {
-          return;
-        }
+        if (currentFilter !== "ALL" && pt.severity !== currentFilter) return;
 
         const isRed = pt.severity === "RED";
         const isOrange = pt.severity === "ORANGE";
@@ -381,18 +386,20 @@
         const ringRadius = isRed ? (zoom >= 15 ? 8 : 6) : isOrange ? (zoom >= 15 ? 6 : 4.5) : (zoom >= 15 ? 4 : 3);
         const strokeWeight = isRed ? 2.5 : isOrange ? 1.8 : 1.2;
 
-        // Hollow Donut Reticle (Center is clear to view underlying tarmac)
-        const reticle = L.circleMarker([pt.lat, pt.lng], {
+        const posLat = pt.snappedLat || pt.lat;
+        const posLng = pt.snappedLng || pt.lng;
+
+        const reticle = L.circleMarker([posLat, posLng], {
           radius: ringRadius,
           color: strokeColor,
           weight: strokeWeight,
           fillColor: isRed ? strokeColor : "transparent",
-          fillOpacity: isRed ? 0.35 : 0.05
+          fillOpacity: isRed ? 0.4 : 0.05
         });
 
         reticle.on('click', () => {
           openInspector(pt);
-          map.panTo([pt.lat, pt.lng], { animate: true });
+          map.panTo([posLat, posLng], { animate: true });
         });
 
         reticle.addTo(canvasLayer);
@@ -401,27 +408,24 @@
 
     map.on('zoomend', renderCanvasMarkers);
     map.on('click', (e) => {
-      // Close drawer if user taps empty map area
       if (e.originalEvent && !e.originalEvent.target.classList.contains('leaflet-interactive')) {
         closeInspector();
       }
     });
 
-    function loadSheetData() {
+    async function loadSheetData() {
       const queryUrl = CSV_URL + '&nocache=' + new Date().getTime();
 
       Papa.parse(queryUrl, {
         download: true,
         header: true,
         skipEmptyLines: true,
-        complete: function(res) {
+        complete: async function(res) {
           const rows = res.data;
           if (!rows || rows.length === 0) return;
 
           const points = [];
-          let cRed = 0;
-          let cOrange = 0;
-          let cYellow = 0;
+          let cRed = 0, cOrange = 0, cYellow = 0;
 
           rows.forEach(r => {
             const keys = Object.keys(r);
@@ -449,27 +453,40 @@
             else if (sev === "ORANGE" || force >= 2.0) cOrange++;
             else cYellow++;
 
-            points.push({
-              lat,
-              lng,
-              gforce: force,
-              severity: sev,
-              type: typ,
-              time: tme
-            });
+            points.push({ lat, lng, gforce: force, severity: sev, type: typ, time: tme });
           });
 
           allTelemetryPoints = points;
-
           document.getElementById("count-all").innerText = points.length;
           document.getElementById("count-red").innerText = cRed;
           document.getElementById("count-orange").innerText = cOrange;
           document.getElementById("count-yellow").innerText = cYellow;
 
+          // Render immediate state
+          renderCanvasMarkers();
+
+          // Snap unique geographic nodes asynchronously to highway geometry
+          const uniqueClusters = new Map();
+          points.forEach(p => {
+            const key = `${p.lat.toFixed(4)}_${p.lng.toFixed(4)}`;
+            if (!uniqueClusters.has(key)) uniqueClusters.set(key, { lat: p.lat, lng: p.lng });
+          });
+
+          for (const [key, loc] of uniqueClusters.entries()) {
+            const snapped = await snapPointToRoad(loc.lat, loc.lng);
+            points.forEach(p => {
+              if (`${p.lat.toFixed(4)}_${p.lng.toFixed(4)}` === key) {
+                p.snappedLat = snapped.lat;
+                p.snappedLng = snapped.lng;
+              }
+            });
+          }
+
+          // Re-render snapped points right on the tarmac
           renderCanvasMarkers();
 
           if (!mapInitialFocus && points.length > 0) {
-            const bounds = points.map(p => [p.lat, p.lng]);
+            const bounds = points.map(p => [p.snappedLat || p.lat, p.snappedLng || p.lng]);
             map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
             mapInitialFocus = true;
           }
@@ -485,16 +502,14 @@
         document.getElementById("ui-badge").className = "badge active";
         document.getElementById("ui-badge").innerText = "TRACKING";
 
-        try {
-          if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
-        } catch (e) {}
-
+        try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
         try { audioEngine.play().catch(() => {}); } catch (e) {}
 
         if (navigator.geolocation) {
           watchId = navigator.geolocation.watchPosition(
             (pos) => {
-              if (pos.coords.accuracy <= 25) {
+              // Strict accuracy rejection: drop anything > 20m error
+              if (pos.coords.accuracy <= 20) {
                 myLat = pos.coords.latitude;
                 myLng = pos.coords.longitude;
               }
