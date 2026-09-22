@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
   <title>RoadPulse — Road Surface Monitor</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
   <style>
     :root {
       --bg-canvas: #121214;
@@ -57,9 +59,8 @@
       width: 100%;
       height: 100%;
       background-color: var(--bg-canvas);
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       overflow: hidden;
-      transition: background-color 0.3s ease;
     }
 
     .ios-card {
@@ -67,7 +68,7 @@
       top: 16px;
       left: 14px;
       right: 14px;
-      max-width: 390px;
+      max-width: 400px;
       margin: 0 auto;
       background: var(--card-bg);
       border: 1px solid var(--card-border);
@@ -77,7 +78,6 @@
       z-index: 1000;
       backdrop-filter: blur(20px) saturate(180%);
       -webkit-backdrop-filter: blur(20px) saturate(180%);
-      transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
     }
 
     .card-header {
@@ -90,7 +90,6 @@
       font-size: 15px;
       font-weight: 700;
       color: var(--text-primary);
-      letter-spacing: -0.2px;
     }
 
     .header-actions {
@@ -109,13 +108,6 @@
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      padding: 0;
-      outline: none;
-      transition: transform 0.2s ease, background 0.3s ease;
-    }
-
-    .theme-toggle-btn:active {
-      transform: scale(0.90);
     }
 
     .theme-toggle-btn svg {
@@ -124,8 +116,6 @@
       fill: none;
       stroke: var(--text-primary);
       stroke-width: 2;
-      stroke-linecap: round;
-      stroke-linejoin: round;
     }
 
     .badge {
@@ -135,7 +125,6 @@
       border-radius: 12px;
       background: var(--badge-bg);
       color: var(--badge-color);
-      transition: all 0.3s ease;
     }
 
     .badge.active {
@@ -148,15 +137,10 @@
       color: #ff453a;
     }
 
-    .badge.offline {
-      background: rgba(255, 159, 10, 0.2);
-      color: #ff9f0a;
-    }
-
     .btn-action {
       width: 100%;
       margin-top: 12px;
-      padding: 12px;
+      padding: 11px;
       font-size: 14px;
       font-weight: 600;
       border: none;
@@ -164,11 +148,6 @@
       background: var(--btn-primary);
       color: var(--btn-text);
       cursor: pointer;
-      transition: opacity 0.2s, background-color 0.2s;
-    }
-
-    .btn-action:active {
-      opacity: 0.75;
     }
 
     .btn-action.stop {
@@ -187,7 +166,6 @@
       border-radius: 10px;
       padding: 8px 3px;
       text-align: center;
-      transition: background 0.3s ease;
     }
 
     .stat-label {
@@ -204,51 +182,43 @@
       margin-top: 2px;
     }
 
+    .filter-pills {
+      display: flex;
+      gap: 6px;
+      margin-top: 12px;
+    }
+
+    .filter-pill {
+      flex: 1;
+      padding: 6px 0;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 8px;
+      border: 1px solid var(--card-border);
+      background: var(--stat-box-bg);
+      color: var(--text-secondary);
+      cursor: pointer;
+      text-align: center;
+    }
+
+    .filter-pill.active {
+      background: var(--btn-primary);
+      color: #ffffff;
+      border-color: transparent;
+    }
+
     .status-text {
       margin-top: 10px;
       font-size: 12px;
       color: var(--status-color);
       text-align: center;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
     }
-
-    .legend-bar {
-      display: flex;
-      justify-content: space-around;
-      margin-top: 10px;
-      padding-top: 10px;
-      border-top: 1px solid var(--border-separator);
-      font-size: 11px;
-      color: var(--text-secondary);
-    }
-
-    .line-indicator {
-      display: inline-block;
-      width: 12px;
-      height: 3px;
-      border-radius: 2px;
-      margin-right: 4px;
-      vertical-align: middle;
-    }
-
-    .line-indicator.red { background: #ff3b30; }
-    .line-indicator.orange { background: #ff9500; }
-    .line-indicator.yellow { background: #ffd60a; }
 
     .leaflet-popup-content-wrapper {
       border-radius: 14px !important;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25) !important;
-      font-family: -apple-system, sans-serif !important;
-      padding: 2px !important;
       background: var(--popup-bg) !important;
       color: var(--popup-text) !important;
       border: 1px solid var(--card-border);
-    }
-
-    .leaflet-popup-tip {
-      background: var(--popup-bg) !important;
     }
   </style>
 </head>
@@ -260,7 +230,7 @@
 
   <div class="ios-card">
     <div class="card-header">
-      <div class="title">RoadPulse Telemetry</div>
+      <div class="title">RoadPulse Cluster View</div>
       <div class="header-actions">
         <button id="theme-btn" class="theme-toggle-btn" onclick="toggleTheme()" aria-label="Toggle Theme">
           <svg id="theme-icon-moon" viewBox="0 0 24 24" style="display:none;">
@@ -296,7 +266,7 @@
         <div id="stat-lng" class="stat-val">--.----</div>
       </div>
       <div class="stat-box">
-        <div class="stat-label">Samples</div>
+        <div class="stat-label">Total</div>
         <div id="stat-spots" class="stat-val">0</div>
       </div>
       <div class="stat-box">
@@ -305,18 +275,20 @@
       </div>
     </div>
 
-    <div id="ui-status" class="status-text">Zoom in (15+) to reveal micro hazard dots.</div>
-
-    <div class="legend-bar">
-      <span><span class="line-indicator red"></span>Severe &gt;2.6G</span>
-      <span><span class="line-indicator orange"></span>Mod ~2.0G</span>
-      <span><span class="line-indicator yellow"></span>Minor</span>
+    <div class="filter-pills">
+      <button class="filter-pill active" id="f-all" onclick="changeFilter('ALL')">All</button>
+      <button class="filter-pill" id="f-red" onclick="changeFilter('RED')">Severe</button>
+      <button class="filter-pill" id="f-orange" onclick="changeFilter('ORANGE')">Moderate</button>
+      <button class="filter-pill" id="f-yellow" onclick="changeFilter('YELLOW')">Minor</button>
     </div>
+
+    <div id="ui-status" class="status-text">No lines. Grouped by cluster for clean view.</div>
   </div>
 
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 
   <script>
@@ -328,7 +300,7 @@
     let currentTheme = localStorage.getItem("roadpulse_theme") || "dark";
     document.documentElement.setAttribute("data-theme", currentTheme);
 
-    const map = L.map('map', { zoomControl: false, preferCanvas: true }).setView([18.35, 73.90], 11);
+    const map = L.map('map', { zoomControl: false }).setView([18.35, 73.90], 11);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -336,9 +308,12 @@
       attribution: '&copy; OpenStreetMap'
     }).addTo(map);
 
-    const traceLayerGroup = L.layerGroup().addTo(map);
-    const pinLayerGroup = L.layerGroup().addTo(map);
-    const microDotLayerGroup = L.layerGroup().addTo(map);
+    const markersCluster = L.markerClusterGroup({
+      maxClusterRadius: 40,
+      spiderfyOnMaxZoom: true,
+      showCoverageOnHover: false
+    });
+    map.addLayer(markersCluster);
 
     let isLogging = false;
     let myLat = null;
@@ -350,395 +325,75 @@
     let blynkPollTimer = null;
     let mapInitialFocus = false;
     let wakeLock = null;
-    let isFlushingQueue = false;
-    let globalCleanPoints = [];
+    let activeSeverityFilter = "ALL";
+    let cachedRows = [];
 
     const audioEngine = document.getElementById("bg-audio-engine");
-
-    function getStoredQueue() {
-      try {
-        const raw = localStorage.getItem(QUEUE_STORAGE_KEY);
-        return raw ? JSON.parse(raw) : [];
-      } catch (e) {
-        return [];
-      }
-    }
-
-    function saveStoredQueue(queue) {
-      localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queue));
-      updateQueueUI();
-    }
-
-    function updateQueueUI() {
-      const q = getStoredQueue();
-      const el = document.getElementById("stat-queue");
-      if (el) el.innerText = q.length;
-    }
-
-    function queuePayloadLocally(payload) {
-      const q = getStoredQueue();
-      q.push(payload);
-      saveStoredQueue(q);
-      document.getElementById("ui-badge").className = "badge offline";
-      document.getElementById("ui-badge").innerText = "QUEUED";
-      document.getElementById("ui-status").innerText = `Offline: Buffered to device (${q.length} in queue)`;
-    }
-
-    async function flushOfflineQueue() {
-      if (isFlushingQueue || !navigator.onLine) return;
-      let q = getStoredQueue();
-      if (q.length === 0) return;
-
-      isFlushingQueue = true;
-      document.getElementById("ui-status").innerText = `Syncing ${q.length} cached records...`;
-
-      while (q.length > 0 && navigator.onLine) {
-        const item = q[0];
-        try {
-          await fetch(GOOGLE_SCRIPT_URL, {
-            method: "POST",
-            mode: "no-cors",
-            headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: JSON.stringify(item)
-          });
-          q.shift();
-          saveStoredQueue(q);
-        } catch (err) {
-          break;
-        }
-      }
-
-      isFlushingQueue = false;
-      updateQueueUI();
-      loadSheetData();
-      if (isLogging) {
-        document.getElementById("ui-badge").className = "badge active";
-        document.getElementById("ui-badge").innerText = "TRACKING";
-      }
-    }
-
-    window.addEventListener("online", flushOfflineQueue);
-    setInterval(flushOfflineQueue, 10000);
-
-    function applyThemeUI(theme) {
-      const moon = document.getElementById("theme-icon-moon");
-      const sun = document.getElementById("theme-icon-sun");
-      if (theme === "dark") {
-        moon.style.display = "none";
-        sun.style.display = "block";
-      } else {
-        moon.style.display = "block";
-        sun.style.display = "none";
-      }
-    }
 
     function toggleTheme() {
       currentTheme = currentTheme === "dark" ? "light" : "dark";
       document.documentElement.setAttribute("data-theme", currentTheme);
       localStorage.setItem("roadpulse_theme", currentTheme);
-      applyThemeUI(currentTheme);
-      renderLayers();
+      document.getElementById("theme-icon-moon").style.display = currentTheme === "dark" ? "none" : "block";
+      document.getElementById("theme-icon-sun").style.display = currentTheme === "dark" ? "block" : "none";
+      renderMarkers();
     }
 
-    applyThemeUI(currentTheme);
-    updateQueueUI();
-
-    async function requestWakeLock() {
-      try {
-        if ('wakeLock' in navigator) {
-          wakeLock = await navigator.wakeLock.request('screen');
-        }
-      } catch (err) {}
+    function changeFilter(val) {
+      activeSeverityFilter = val;
+      document.querySelectorAll(".filter-pill").forEach(el => el.classList.remove("active"));
+      document.getElementById("f-" + val.toLowerCase()).classList.add("active");
+      renderMarkers();
     }
 
-    function releaseWakeLock() {
-      if (wakeLock !== null) {
-        wakeLock.release().then(() => {
-          wakeLock = null;
-        }).catch(() => {});
-      }
+    function getColor(s) {
+      if (s === "RED") return "#ff453a";
+      if (s === "ORANGE") return "#ff9f0a";
+      return "#ffd60a";
     }
 
-    document.addEventListener("visibilitychange", async () => {
-      if (isLogging && document.visibilityState === 'visible') {
-        await requestWakeLock();
-      }
-    });
+    function renderMarkers() {
+      markersCluster.clearLayers();
+      if (!cachedRows || cachedRows.length === 0) return;
 
-    function toggleLogger() {
-      if (!isLogging) {
-        startLogger();
-      } else {
-        stopLogger();
-      }
-    }
+      const filtered = cachedRows.filter(p => {
+        if (activeSeverityFilter === "ALL") return true;
+        return p.severity === activeSeverityFilter;
+      });
 
-    async function startLogger() {
-      isLogging = true;
-      document.getElementById("ui-btn").innerText = "Stop Logging";
-      document.getElementById("ui-btn").classList.add("stop");
-      document.getElementById("ui-badge").className = "badge active";
-      document.getElementById("ui-badge").innerText = "TRACKING";
-      document.getElementById("ui-status").innerText = "Background logging locked & active";
-
-      await requestWakeLock();
-
-      try {
-        audioEngine.play().catch(() => {});
-      } catch (e) {}
-
-      if (navigator.geolocation) {
-        watchId = navigator.geolocation.watchPosition(
-          (pos) => {
-            if (pos.coords.accuracy > 25) {
-              document.getElementById("ui-status").innerText = `Filtering noisy GPS (${Math.round(pos.coords.accuracy)}m)`;
-              return;
-            }
-
-            const rawLat = pos.coords.latitude;
-            const rawLng = pos.coords.longitude;
-
-            if (smoothLat === null || smoothLng === null) {
-              smoothLat = rawLat;
-              smoothLng = rawLng;
-            } else {
-              smoothLat = smoothLat * 0.65 + rawLat * 0.35;
-              smoothLng = smoothLng * 0.65 + rawLng * 0.35;
-            }
-
-            myLat = smoothLat;
-            myLng = smoothLng;
-
-            document.getElementById("stat-lat").innerText = myLat.toFixed(4);
-            document.getElementById("stat-lng").innerText = myLng.toFixed(4);
-          },
-          (err) => {
-            document.getElementById("ui-status").innerText = "GPS Lock Weak/Lost";
-          },
-          { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
-        );
-      }
-
-      blynkPollTimer = setInterval(checkBlynk, 1100);
-      flushOfflineQueue();
-    }
-
-    function stopLogger() {
-      isLogging = false;
-      if (blynkPollTimer) clearInterval(blynkPollTimer);
-      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-
-      releaseWakeLock();
-
-      try {
-        audioEngine.pause();
-        audioEngine.currentTime = 0;
-      } catch (e) {}
-
-      document.getElementById("ui-btn").innerText = "Start Telemetry Logging";
-      document.getElementById("ui-btn").classList.remove("stop");
-      document.getElementById("ui-badge").className = "badge";
-      document.getElementById("ui-badge").innerText = "VIEWER";
-      document.getElementById("ui-status").innerText = "Session stopped.";
-      document.getElementById("stat-lat").innerText = "--.----";
-      document.getElementById("stat-lng").innerText = "--.----";
-      smoothLat = null;
-      smoothLng = null;
-    }
-
-    async function checkBlynk() {
-      if (!isLogging) return;
-
-      const urls = [
-        `https://blr1.blynk.cloud/external/api/get?token=${BLYNK_TOKEN}&v1`,
-        `https://blynk.cloud/external/api/get?token=${BLYNK_TOKEN}&v1`
-      ];
-
-      let raw = null;
-      for (const url of urls) {
-        try {
-          const res = await fetch(url);
-          if (res.ok) {
-            raw = await res.text();
-            if (raw && raw.trim() !== "") break;
-          }
-        } catch (e) {}
-      }
-
-      if (!raw || raw.trim() === "") return;
-
-      raw = raw.replace(/^"|"$/g, '').trim();
-      if (raw === lastBlynkPayload) return;
-      lastBlynkPayload = raw;
-
-      const parts = raw.split(",");
-      if (parts.length < 3) return;
-
-      if (myLat === null || myLng === null) {
-        document.getElementById("ui-status").innerText = "Skipped: Awaiting clean road lock";
-        return;
-      }
-
-      const anomalyType = parts[0].trim();
-      const severity = parts[1].trim();
-      const gforce = parseFloat(parts[2]) || 0;
-
-      const recordPayload = {
-        type: anomalyType,
-        color: severity,
-        gforce: gforce,
-        lat: myLat,
-        lng: myLng
-      };
-
-      if (!navigator.onLine) {
-        queuePayloadLocally(recordPayload);
-        return;
-      }
-
-      document.getElementById("ui-badge").className = "badge recording";
-      document.getElementById("ui-badge").innerText = "RECORDING";
-      document.getElementById("ui-status").innerText = `Logged: ${anomalyType} (${gforce.toFixed(2)}g)`;
-
-      try {
-        await fetch(GOOGLE_SCRIPT_URL, {
-          method: "POST",
-          mode: "no-cors",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify(recordPayload)
-        });
-
-        setTimeout(() => {
-          if (isLogging) {
-            document.getElementById("ui-badge").className = "badge active";
-            document.getElementById("ui-badge").innerText = "TRACKING";
-            loadSheetData();
-          }
-        }, 1800);
-      } catch (err) {
-        queuePayloadLocally(recordPayload);
-      }
-    }
-
-    function getTelemetryColor(gforce, severity) {
-      const s = (severity || "").toUpperCase().trim();
-      if (gforce >= 2.6 || s === "RED") return currentTheme === "dark" ? "#ff453a" : "#ff3b30";
-      if (gforce >= 2.0 || s === "ORANGE") return currentTheme === "dark" ? "#ff9f0a" : "#ff9500";
-      return currentTheme === "dark" ? "#ffd60a" : "#ffcc00";
-    }
-
-    function renderLayers() {
-      traceLayerGroup.clearLayers();
-      pinLayerGroup.clearLayers();
-      microDotLayerGroup.clearLayers();
-
-      const points = globalCleanPoints;
-      if (!points || points.length === 0) return;
-
-      const zoom = map.getZoom();
-
-      for (let i = 0; i < points.length - 1; i++) {
-        const p1 = points[i];
-        const p2 = points[i + 1];
-
-        const dLat = p1.lat - p2.lat;
-        const dLng = p1.lng - p2.lng;
-        if (dLat * dLat + dLng * dLng > 0.05) continue;
-
-        const segPeakForce = Math.max(p1.gforce, p2.gforce);
-        const segSev = (p1.severity === "RED" || p2.severity === "RED") ? "RED" :
-                       (p1.severity === "ORANGE" || p2.severity === "ORANGE") ? "ORANGE" : "YELLOW";
-
-        const strokeColor = getTelemetryColor(segPeakForce, segSev);
-        const strokeWidth = segSev === "RED" ? 5.5 : segSev === "ORANGE" ? 4 : 2.5;
-
-        const segment = L.polyline([[p1.lat, p1.lng], [p2.lat, p2.lng]], {
-          color: strokeColor,
-          weight: strokeWidth,
-          opacity: currentTheme === "dark" ? 0.95 : 0.85,
-          lineCap: "round",
-          lineJoin: "round"
-        });
-
-        segment.bindPopup(`
-          <div style="font-size:13px; line-height:1.5;">
-            <b style="font-size:14px;">Telemetry Vector</b><br/>
-            Peak Force: ${segPeakForce.toFixed(2)} g<br/>
-            Severity: <b style="color:${strokeColor}">${segSev}</b>
+      filtered.forEach(p => {
+        const c = getColor(p.severity);
+        const marker = L.circleMarker([p.lat, p.lng], {
+          radius: p.severity === "RED" ? 7 : p.severity === "ORANGE" ? 5 : 4,
+          fillColor: c,
+          color: "#ffffff",
+          weight: 1,
+          fillOpacity: 0.9
+        }).bindPopup(`
+          <div style="font-size:13px; line-height:1.4;">
+            <b>${p.type}</b><br/>
+            Severity: <b style="color:${c}">${p.severity}</b><br/>
+            Force: ${p.gforce.toFixed(2)} g<br/>
+            Time: ${p.time || "N/A"}
           </div>
         `);
-
-        segment.addTo(traceLayerGroup);
-      }
-
-      points.forEach(pt => {
-        const isSevere = pt.severity === "RED" || pt.gforce >= 2.6;
-        const isModerate = pt.severity === "ORANGE" || (pt.gforce >= 2.0 && pt.gforce < 2.6);
-
-        if (isSevere || isModerate) {
-          const markerColor = getTelemetryColor(pt.gforce, pt.severity);
-          const markerRadius = isSevere ? 7 : 5;
-
-          const pin = L.circleMarker([pt.lat, pt.lng], {
-            radius: markerRadius,
-            color: "#ffffff",
-            weight: 1.5,
-            fillColor: markerColor,
-            fillOpacity: 1
-          });
-
-          pin.bindPopup(`
-            <div style="font-size:13px; line-height:1.5;">
-              <b style="font-size:14px;">${pt.type}</b><br/>
-              Force: ${pt.gforce.toFixed(2)} g<br/>
-              Severity: <b style="color:${markerColor}">${pt.severity}</b><br/>
-              Time: ${pt.time || "N/A"}
-            </div>
-          `);
-
-          pin.addTo(pinLayerGroup);
-        }
-
-        if (zoom >= 15) {
-          const dotColor = getTelemetryColor(pt.gforce, pt.severity);
-          const dot = L.circleMarker([pt.lat, pt.lng], {
-            radius: pt.severity === "YELLOW" ? 3 : 4,
-            color: "#ffffff",
-            weight: 0.8,
-            fillColor: dotColor,
-            fillOpacity: 0.85
-          });
-
-          dot.bindPopup(`
-            <div style="font-size:12px; line-height:1.4;">
-              <b>${pt.type}</b> (${pt.severity})<br/>
-              Force: ${pt.gforce.toFixed(2)} g
-            </div>
-          `);
-
-          dot.addTo(microDotLayerGroup);
-        }
+        markersCluster.addLayer(marker);
       });
-    }
 
-    map.on('zoomend', renderLayers);
+      document.getElementById("stat-spots").innerText = filtered.length;
+    }
 
     function loadSheetData() {
       const queryUrl = CSV_URL + '&nocache=' + new Date().getTime();
-
       Papa.parse(queryUrl, {
         download: true,
         header: true,
         skipEmptyLines: true,
         complete: function(res) {
           const rows = res.data;
-          if (!rows || rows.length === 0) {
-            document.getElementById("stat-spots").innerText = "0";
-            return;
-          }
+          if (!rows || rows.length === 0) return;
 
-          const rawPoints = [];
-
+          const clean = [];
           rows.forEach(r => {
             const keys = Object.keys(r);
             const latKey = keys.find(k => /^(lat|latitude)/i.test(k.trim()));
@@ -748,19 +403,18 @@
             const typeKey = keys.find(k => /type/i.test(k.trim()));
             const timeKey = keys.find(k => /(time|timestamp|date)/i.test(k.trim()));
 
-            let rawVal1 = latKey ? parseFloat(r[latKey]) : NaN;
-            let rawVal2 = lngKey ? parseFloat(r[lngKey]) : NaN;
+            let r1 = latKey ? parseFloat(r[latKey]) : NaN;
+            let r2 = lngKey ? parseFloat(r[lngKey]) : NaN;
+            if (isNaN(r1) || isNaN(r2) || r1 === 0 || r2 === 0) return;
 
-            if (isNaN(rawVal1) || isNaN(rawVal2) || rawVal1 === 0 || rawVal2 === 0) return;
+            let lat = r1 > 50.0 && r2 < 30.0 ? r2 : r1;
+            let lng = r1 > 50.0 && r2 < 30.0 ? r1 : r2;
 
-            let actualLat = rawVal1 > 50.0 && rawVal2 < 30.0 ? rawVal2 : rawVal1;
-            let actualLng = rawVal1 > 50.0 && rawVal2 < 30.0 ? rawVal1 : rawVal2;
+            if (lat < 8.0 || lat > 37.0 || lng < 68.0 || lng > 98.0) return;
 
-            if (actualLat < 8.0 || actualLat > 37.0 || actualLng < 68.0 || actualLng > 98.0) return;
-
-            rawPoints.push({
-              lat: actualLat,
-              lng: actualLng,
+            clean.push({
+              lat: lat,
+              lng: lng,
               gforce: gKey ? (parseFloat(r[gKey]) || 0) : 0,
               severity: sevKey ? r[sevKey] : "YELLOW",
               type: typeKey ? r[typeKey] : "POTHOLE",
@@ -768,48 +422,14 @@
             });
           });
 
-          if (rawPoints.length === 0) {
-            document.getElementById("stat-spots").innerText = "0";
-            return;
-          }
+          cachedRows = clean;
+          renderMarkers();
 
-          const filteredPoints = [];
-          let curLat = rawPoints[0].lat;
-          let curLng = rawPoints[0].lng;
-
-          rawPoints.forEach((p, idx) => {
-            if (idx > 0) {
-              const prev = rawPoints[idx - 1];
-              const dLat = p.lat - prev.lat;
-              const dLng = p.lng - prev.lng;
-              if (dLat * dLat + dLng * dLng > 0.0025) {
-                curLat = p.lat;
-                curLng = p.lng;
-              } else {
-                curLat = curLat * 0.7 + p.lat * 0.3;
-                curLng = curLng * 0.7 + p.lng * 0.3;
-              }
-            }
-            filteredPoints.push({
-              lat: curLat,
-              lng: curLng,
-              gforce: p.gforce,
-              severity: p.severity,
-              type: p.type,
-              time: p.time
-            });
-          });
-
-          globalCleanPoints = filteredPoints;
-          renderLayers();
-
-          if (!mapInitialFocus && filteredPoints.length > 0) {
-            const bounds = filteredPoints.map(p => [p.lat, p.lng]);
+          if (!mapInitialFocus && clean.length > 0) {
+            const bounds = clean.map(p => [p.lat, p.lng]);
             map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
             mapInitialFocus = true;
           }
-
-          document.getElementById("stat-spots").innerText = filteredPoints.length;
         }
       });
     }
