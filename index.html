@@ -3,22 +3,23 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-  <title>RoadPulse — Road Surface Monitor</title>
+  <title>RoadPulse Telemetry — Discrete Defect Map</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     :root {
-      --bg-canvas: #121214;
-      --card-bg: rgba(28, 28, 30, 0.85);
+      --bg-canvas: #111113;
+      --card-bg: rgba(26, 26, 28, 0.90);
       --card-border: rgba(255, 255, 255, 0.12);
-      --card-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+      --card-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
       --text-primary: #f5f5f7;
       --text-secondary: #98989d;
-      --stat-box-bg: rgba(255, 255, 255, 0.08);
+      --stat-box-bg: rgba(255, 255, 255, 0.06);
+      --border-separator: rgba(255, 255, 255, 0.1);
       --badge-bg: rgba(255, 255, 255, 0.12);
       --badge-color: #d1d1d6;
       --btn-primary: #0a84ff;
       --btn-text: #ffffff;
-      --popup-bg: rgba(24, 24, 26, 0.95);
+      --popup-bg: rgba(28, 28, 30, 0.95);
       --popup-text: #f5f5f7;
     }
 
@@ -41,155 +42,199 @@
       overflow: hidden;
     }
 
-    .ios-card {
+    /* Top Floating Dashboard */
+    .top-dashboard {
       position: absolute;
-      top: 16px;
-      left: 14px;
-      right: 14px;
-      max-width: 380px;
+      top: 14px;
+      left: 12px;
+      right: 12px;
+      max-width: 410px;
       margin: 0 auto;
       background: var(--card-bg);
       border: 1px solid var(--card-border);
-      border-radius: 20px;
-      padding: 16px;
+      border-radius: 18px;
+      padding: 14px 16px;
       box-shadow: var(--card-shadow);
       z-index: 1000;
-      backdrop-filter: blur(20px) saturate(180%);
-      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
     }
 
-    .card-header {
+    .dash-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
 
-    .title {
+    .brand-title {
       font-size: 15px;
       font-weight: 700;
-      color: var(--text-primary);
       letter-spacing: -0.2px;
+      color: var(--text-primary);
     }
 
     .badge {
       font-size: 11px;
       font-weight: 600;
-      padding: 3px 9px;
-      border-radius: 12px;
+      padding: 3px 8px;
+      border-radius: 10px;
       background: var(--badge-bg);
       color: var(--badge-color);
-      transition: all 0.3s ease;
     }
 
     .badge.active {
-      background: rgba(10, 132, 255, 0.2);
+      background: rgba(10, 132, 255, 0.25);
       color: #0a84ff;
     }
 
-    .btn-action {
-      width: 100%;
+    .badge.recording {
+      background: rgba(255, 69, 58, 0.25);
+      color: #ff453a;
+    }
+
+    /* Interactive Severity Pills */
+    .filter-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 5px;
       margin-top: 12px;
-      padding: 11px;
-      font-size: 14px;
+    }
+
+    .filter-chip {
+      padding: 7px 2px;
+      border-radius: 10px;
+      border: 1px solid var(--card-border);
+      background: var(--stat-box-bg);
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      transition: all 0.2s ease;
+    }
+
+    .filter-chip .chip-count {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .filter-chip.active {
+      background: rgba(255, 255, 255, 0.16);
+      border-color: rgba(255, 255, 255, 0.4);
+      color: var(--text-primary);
+    }
+
+    .filter-chip.chip-red.active {
+      background: rgba(255, 69, 58, 0.22);
+      border-color: #ff453a;
+    }
+    .filter-chip.chip-orange.active {
+      background: rgba(255, 159, 10, 0.22);
+      border-color: #ff9f0a;
+    }
+    .filter-chip.chip-yellow.active {
+      background: rgba(255, 214, 10, 0.22);
+      border-color: #ffd60a;
+    }
+
+    /* Logger Trigger Button */
+    .btn-logger {
+      width: 100%;
+      margin-top: 10px;
+      padding: 9px;
+      font-size: 13px;
       font-weight: 600;
       border: none;
-      border-radius: 12px;
+      border-radius: 10px;
       background: var(--btn-primary);
       color: var(--btn-text);
       cursor: pointer;
-      transition: opacity 0.2s, background-color 0.2s;
     }
 
-    .btn-action:active {
-      opacity: 0.75;
-    }
-
-    .btn-action.stop {
+    .btn-logger.stop {
       background: #ff3b30;
     }
 
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 6px;
-      margin-top: 12px;
+    /* Bottom Inspector Drawer */
+    .inspector-panel {
+      position: absolute;
+      bottom: 18px;
+      left: 12px;
+      right: 12px;
+      max-width: 410px;
+      margin: 0 auto;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 12px 16px;
+      box-shadow: var(--card-shadow);
+      z-index: 1000;
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      display: none;
+      animation: slide-up 0.25s ease-out;
     }
 
-    .stat-box {
+    @keyframes slide-up {
+      from { transform: translateY(16px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .inspector-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .inspector-title {
+      font-size: 14px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .close-inspector {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      font-size: 18px;
+      cursor: pointer;
+      padding: 0 4px;
+    }
+
+    .inspector-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .metric-item {
       background: var(--stat-box-bg);
-      border-radius: 10px;
-      padding: 8px 4px;
+      border-radius: 8px;
+      padding: 6px;
       text-align: center;
     }
 
-    .stat-label {
+    .metric-item .m-label {
       font-size: 9px;
-      font-weight: 600;
       color: var(--text-secondary);
       text-transform: uppercase;
+      font-weight: 600;
     }
 
-    .stat-val {
+    .metric-item .m-val {
       font-size: 13px;
       font-weight: 700;
       color: var(--text-primary);
       margin-top: 2px;
-    }
-
-    /* Precision Luminescent Glow Nodes */
-    .glow-wrapper {
-      position: relative;
-      width: 28px;
-      height: 28px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-    }
-
-    .glow-core {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      transition: transform 0.2s ease;
-    }
-
-    .glow-core.severe {
-      background-color: #ffffff;
-      border: 1.5px solid #ff453a;
-      box-shadow: 0 0 8px 3px #ff3b30, 0 0 16px 6px rgba(255, 69, 58, 0.45);
-      animation: pulse-red 1.8s infinite alternate ease-in-out;
-    }
-
-    .glow-core.moderate {
-      background-color: #ffffff;
-      border: 1.5px solid #ff9f0a;
-      box-shadow: 0 0 6px 2px #ff9500, 0 0 12px 4px rgba(255, 159, 10, 0.4);
-    }
-
-    .glow-wrapper:hover .glow-core {
-      transform: scale(1.4);
-    }
-
-    @keyframes pulse-red {
-      0% {
-        box-shadow: 0 0 6px 2px #ff3b30, 0 0 10px 4px rgba(255, 69, 58, 0.4);
-      }
-      100% {
-        box-shadow: 0 0 12px 4px #ff3b30, 0 0 20px 8px rgba(255, 69, 58, 0.65);
-      }
-    }
-
-    .leaflet-popup-content-wrapper {
-      border-radius: 14px !important;
-      background: var(--popup-bg) !important;
-      color: var(--popup-text) !important;
-      border: 1px solid var(--card-border);
-      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.6) !important;
-    }
-
-    .leaflet-popup-tip {
-      background: var(--popup-bg) !important;
     }
   </style>
 </head>
@@ -199,24 +244,56 @@
     <source src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA" type="audio/wav">
   </audio>
 
-  <div class="ios-card">
-    <div class="card-header">
-      <div class="title">RoadPulse Stream</div>
+  <!-- Top Dashboard Controls -->
+  <div class="top-dashboard">
+    <div class="dash-header">
+      <div class="brand-title">RoadPulse Inspector</div>
       <span id="ui-badge" class="badge">VIEWER</span>
     </div>
 
-    <button id="ui-btn" class="btn-action" onclick="toggleLogger()">
-      Start Road Scanner
-    </button>
+    <!-- Severity Filter Tabs -->
+    <div class="filter-strip">
+      <button class="filter-chip active" id="filter-all" onclick="applyFilter('ALL')">
+        <span>All</span>
+        <span class="chip-count" id="count-all">0</span>
+      </button>
+      <button class="filter-chip chip-red" id="filter-red" onclick="applyFilter('RED')">
+        <span style="color:#ff453a;">Severe</span>
+        <span class="chip-count" id="count-red">0</span>
+      </button>
+      <button class="filter-chip chip-orange" id="filter-orange" onclick="applyFilter('ORANGE')">
+        <span style="color:#ff9f0a;">Moderate</span>
+        <span class="chip-count" id="count-orange">0</span>
+      </button>
+      <button class="filter-chip chip-yellow" id="filter-yellow" onclick="applyFilter('YELLOW')">
+        <span style="color:#ffd60a;">Minor</span>
+        <span class="chip-count" id="count-yellow">0</span>
+      </button>
+    </div>
 
-    <div class="stats-grid">
-      <div class="stat-box">
-        <div class="stat-label">Critical Spots</div>
-        <div id="stat-hazards" class="stat-val" style="color: #ff453a;">0</div>
+    <button id="ui-btn" class="btn-logger" onclick="toggleLogger()">
+      Start Telemetry Logging
+    </button>
+  </div>
+
+  <!-- Bottom Interactive Telemetry Inspector -->
+  <div id="inspector" class="inspector-panel">
+    <div class="inspector-header">
+      <div class="inspector-title" id="ins-type">Pothole Alert</div>
+      <button class="close-inspector" onclick="closeInspector()">&times;</button>
+    </div>
+    <div class="inspector-metrics">
+      <div class="metric-item">
+        <div class="m-label">Impact</div>
+        <div class="m-val" id="ins-force">--</div>
       </div>
-      <div class="stat-box">
-        <div class="stat-label">Road Condition</div>
-        <div id="stat-health" class="stat-val" style="color: #30d158;">Good</div>
+      <div class="metric-item">
+        <div class="m-label">Severity</div>
+        <div class="m-val" id="ins-severity">--</div>
+      </div>
+      <div class="metric-item">
+        <div class="m-label">Time</div>
+        <div class="m-val" id="ins-time" style="font-size:11px;">--</div>
       </div>
     </div>
   </div>
@@ -224,7 +301,6 @@
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 
   <script>
@@ -240,8 +316,7 @@
       attribution: '&copy; OpenStreetMap'
     }).addTo(map);
 
-    let heatLayer = null;
-    const coreLayer = L.layerGroup().addTo(map);
+    const canvasLayer = L.layerGroup().addTo(map);
 
     let isLogging = false;
     let myLat = null;
@@ -252,15 +327,163 @@
     let mapInitialFocus = false;
     let wakeLock = null;
 
+    let allTelemetryPoints = [];
+    let currentFilter = "ALL";
+
     const audioEngine = document.getElementById("bg-audio-engine");
+
+    function applyFilter(sev) {
+      currentFilter = sev;
+      document.querySelectorAll(".filter-chip").forEach(c => c.classList.remove("active"));
+      document.getElementById("filter-" + sev.toLowerCase()).classList.add("active");
+      renderCanvasMarkers();
+    }
+
+    function closeInspector() {
+      document.getElementById("inspector").style.display = "none";
+    }
+
+    function openInspector(data) {
+      const panel = document.getElementById("inspector");
+      const typeEl = document.getElementById("ins-type");
+      const forceEl = document.getElementById("ins-force");
+      const sevEl = document.getElementById("ins-severity");
+      const timeEl = document.getElementById("ins-time");
+
+      const isRed = data.severity === "RED";
+      const isOrange = data.severity === "ORANGE";
+      const tagColor = isRed ? "#ff453a" : isOrange ? "#ff9f0a" : "#ffd60a";
+
+      typeEl.innerHTML = `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${tagColor};"></span> ${data.type}`;
+      forceEl.innerText = `${data.gforce.toFixed(2)} G`;
+      sevEl.innerText = data.severity;
+      sevEl.style.color = tagColor;
+      timeEl.innerText = data.time || "Logged";
+
+      panel.style.display = "block";
+    }
+
+    function renderCanvasMarkers() {
+      canvasLayer.clearLayers();
+      if (!allTelemetryPoints || allTelemetryPoints.length === 0) return;
+
+      const zoom = map.getZoom();
+
+      allTelemetryPoints.forEach(pt => {
+        if (currentFilter !== "ALL" && pt.severity !== currentFilter) {
+          return;
+        }
+
+        const isRed = pt.severity === "RED";
+        const isOrange = pt.severity === "ORANGE";
+
+        const strokeColor = isRed ? "#ff453a" : isOrange ? "#ff9f0a" : "#ffd60a";
+        const ringRadius = isRed ? (zoom >= 15 ? 8 : 6) : isOrange ? (zoom >= 15 ? 6 : 4.5) : (zoom >= 15 ? 4 : 3);
+        const strokeWeight = isRed ? 2.5 : isOrange ? 1.8 : 1.2;
+
+        // Hollow Donut Reticle (Center is clear to view underlying tarmac)
+        const reticle = L.circleMarker([pt.lat, pt.lng], {
+          radius: ringRadius,
+          color: strokeColor,
+          weight: strokeWeight,
+          fillColor: isRed ? strokeColor : "transparent",
+          fillOpacity: isRed ? 0.35 : 0.05
+        });
+
+        reticle.on('click', () => {
+          openInspector(pt);
+          map.panTo([pt.lat, pt.lng], { animate: true });
+        });
+
+        reticle.addTo(canvasLayer);
+      });
+    }
+
+    map.on('zoomend', renderCanvasMarkers);
+    map.on('click', (e) => {
+      // Close drawer if user taps empty map area
+      if (e.originalEvent && !e.originalEvent.target.classList.contains('leaflet-interactive')) {
+        closeInspector();
+      }
+    });
+
+    function loadSheetData() {
+      const queryUrl = CSV_URL + '&nocache=' + new Date().getTime();
+
+      Papa.parse(queryUrl, {
+        download: true,
+        header: true,
+        skipEmptyLines: true,
+        complete: function(res) {
+          const rows = res.data;
+          if (!rows || rows.length === 0) return;
+
+          const points = [];
+          let cRed = 0;
+          let cOrange = 0;
+          let cYellow = 0;
+
+          rows.forEach(r => {
+            const keys = Object.keys(r);
+            const latKey = keys.find(k => /^(lat|latitude)/i.test(k.trim()));
+            const lngKey = keys.find(k => /^(lon|lng|longitude)/i.test(k.trim()));
+            const gKey = keys.find(k => /(g_force|gforce|force)/i.test(k.trim()));
+            const sevKey = keys.find(k => /(severity|color)/i.test(k.trim()));
+            const typeKey = keys.find(k => /type/i.test(k.trim()));
+            const timeKey = keys.find(k => /(time|timestamp|date)/i.test(k.trim()));
+
+            let r1 = latKey ? parseFloat(r[latKey]) : NaN;
+            let r2 = lngKey ? parseFloat(r[lngKey]) : NaN;
+            if (isNaN(r1) || isNaN(r2) || r1 === 0 || r2 === 0) return;
+
+            let lat = r1 > 50.0 && r2 < 30.0 ? r2 : r1;
+            let lng = r1 > 50.0 && r2 < 30.0 ? r1 : r2;
+            if (lat < 8.0 || lat > 37.0 || lng < 68.0 || lng > 98.0) return;
+
+            const force = gKey ? (parseFloat(r[gKey]) || 0) : 0;
+            const sev = (sevKey && r[sevKey]) ? r[sevKey].toUpperCase().trim() : "YELLOW";
+            const typ = (typeKey && r[typeKey]) ? r[typeKey] : "POTHOLE";
+            const tme = (timeKey && r[timeKey]) ? r[timeKey] : "";
+
+            if (sev === "RED" || force >= 2.6) cRed++;
+            else if (sev === "ORANGE" || force >= 2.0) cOrange++;
+            else cYellow++;
+
+            points.push({
+              lat,
+              lng,
+              gforce: force,
+              severity: sev,
+              type: typ,
+              time: tme
+            });
+          });
+
+          allTelemetryPoints = points;
+
+          document.getElementById("count-all").innerText = points.length;
+          document.getElementById("count-red").innerText = cRed;
+          document.getElementById("count-orange").innerText = cOrange;
+          document.getElementById("count-yellow").innerText = cYellow;
+
+          renderCanvasMarkers();
+
+          if (!mapInitialFocus && points.length > 0) {
+            const bounds = points.map(p => [p.lat, p.lng]);
+            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+            mapInitialFocus = true;
+          }
+        }
+      });
+    }
 
     async function toggleLogger() {
       if (!isLogging) {
         isLogging = true;
-        document.getElementById("ui-btn").innerText = "Stop Scanner";
+        document.getElementById("ui-btn").innerText = "Stop Telemetry";
         document.getElementById("ui-btn").classList.add("stop");
         document.getElementById("ui-badge").className = "badge active";
-        document.getElementById("ui-badge").innerText = "SCANNING";
+        document.getElementById("ui-badge").innerText = "TRACKING";
 
         try {
           if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
@@ -288,7 +511,7 @@
         if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
         try { audioEngine.pause(); audioEngine.currentTime = 0; } catch (e) {}
 
-        document.getElementById("ui-btn").innerText = "Start Road Scanner";
+        document.getElementById("ui-btn").innerText = "Start Telemetry Logging";
         document.getElementById("ui-btn").classList.remove("stop");
         document.getElementById("ui-badge").className = "badge";
         document.getElementById("ui-badge").innerText = "VIEWER";
@@ -310,6 +533,9 @@
         const parts = raw.split(",");
         if (parts.length < 3) return;
 
+        document.getElementById("ui-badge").className = "badge recording";
+        document.getElementById("ui-badge").innerText = "RECORDING";
+
         await fetch(GOOGLE_SCRIPT_URL, {
           method: "POST",
           mode: "no-cors",
@@ -323,120 +549,14 @@
           })
         });
 
-        setTimeout(loadSheetData, 1800);
+        setTimeout(() => {
+          if (isLogging) {
+            document.getElementById("ui-badge").className = "badge active";
+            document.getElementById("ui-badge").innerText = "TRACKING";
+          }
+          loadSheetData();
+        }, 1800);
       } catch (e) {}
-    }
-
-    function loadSheetData() {
-      const queryUrl = CSV_URL + '&nocache=' + new Date().getTime();
-
-      Papa.parse(queryUrl, {
-        download: true,
-        header: true,
-        skipEmptyLines: true,
-        complete: function(res) {
-          const rows = res.data;
-          if (!rows || rows.length === 0) return;
-
-          const heatData = [];
-          const hotSpots = [];
-          let severeCount = 0;
-
-          rows.forEach(r => {
-            const keys = Object.keys(r);
-            const latKey = keys.find(k => /^(lat|latitude)/i.test(k.trim()));
-            const lngKey = keys.find(k => /^(lon|lng|longitude)/i.test(k.trim()));
-            const gKey = keys.find(k => /(g_force|gforce|force)/i.test(k.trim()));
-            const sevKey = keys.find(k => /(severity|color)/i.test(k.trim()));
-            const typeKey = keys.find(k => /type/i.test(k.trim()));
-            const timeKey = keys.find(k => /(time|timestamp|date)/i.test(k.trim()));
-
-            let r1 = latKey ? parseFloat(r[latKey]) : NaN;
-            let r2 = lngKey ? parseFloat(r[lngKey]) : NaN;
-            if (isNaN(r1) || isNaN(r2) || r1 === 0 || r2 === 0) return;
-
-            let lat = r1 > 50.0 && r2 < 30.0 ? r2 : r1;
-            let lng = r1 > 50.0 && r2 < 30.0 ? r1 : r2;
-            if (lat < 8.0 || lat > 37.0 || lng < 68.0 || lng > 98.0) return;
-
-            const force = gKey ? (parseFloat(r[gKey]) || 0) : 0;
-            const sev = (sevKey && r[sevKey]) ? r[sevKey].toUpperCase() : "YELLOW";
-            const typ = (typeKey && r[typeKey]) ? r[typeKey] : "POTHOLE";
-            const tme = (timeKey && r[timeKey]) ? r[timeKey] : "";
-
-            const intensity = sev === "RED" ? 1.0 : sev === "ORANGE" ? 0.65 : 0.35;
-            heatData.push([lat, lng, intensity]);
-
-            if (sev === "RED" || sev === "ORANGE") {
-              if (sev === "RED") severeCount++;
-              hotSpots.push({ lat, lng, severity: sev, force, type: typ, time: tme });
-            }
-          });
-
-          // Precision Thinned Heat Corridor
-          if (heatLayer) map.removeLayer(heatLayer);
-          heatLayer = L.heatLayer(heatData, {
-            radius: 9,
-            blur: 11,
-            maxZoom: 17,
-            max: 1.0,
-            gradient: {
-              0.25: '#ffd60a',
-              0.60: '#ff9f0a',
-              0.85: '#ff453a'
-            }
-          }).addTo(map);
-
-          // Subtle Luminous Cores
-          coreLayer.clearLayers();
-          hotSpots.forEach(h => {
-            const isRed = h.severity === "RED";
-            const iconHtml = `
-              <div class="glow-wrapper">
-                <div class="glow-core ${isRed ? 'severe' : 'moderate'}"></div>
-              </div>
-            `;
-
-            const glowIcon = L.divIcon({
-              className: '',
-              html: iconHtml,
-              iconSize: [28, 28],
-              iconAnchor: [14, 14]
-            });
-
-            L.marker([h.lat, h.lng], { icon: glowIcon })
-              .bindPopup(`
-                <div style="font-size:13px; line-height:1.5;">
-                  <b style="font-size:14px; color:${isRed ? '#ff453a' : '#ff9f0a'};">
-                    ${h.type} (${h.severity})
-                  </b><br/>
-                  Peak Impact: <b>${h.force.toFixed(2)}G</b><br/>
-                  ${h.time ? `<span style="color:var(--text-secondary); font-size:11px;">${h.time}</span>` : ''}
-                </div>
-              `)
-              .addTo(coreLayer);
-          });
-
-          document.getElementById("stat-hazards").innerText = hotSpots.length;
-          const healthEl = document.getElementById("stat-health");
-          if (severeCount > 5) {
-            healthEl.innerText = "Poor";
-            healthEl.style.color = "#ff453a";
-          } else if (hotSpots.length > 8) {
-            healthEl.innerText = "Degraded";
-            healthEl.style.color = "#ff9f0a";
-          } else {
-            healthEl.innerText = "Fair";
-            healthEl.style.color = "#30d158";
-          }
-
-          if (!mapInitialFocus && heatData.length > 0) {
-            const bounds = heatData.map(p => [p[0], p[1]]);
-            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
-            mapInitialFocus = true;
-          }
-        }
-      });
     }
 
     loadSheetData();
