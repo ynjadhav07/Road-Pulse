@@ -3,10 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-  <title>RoadPulse — Road Surface Monitor</title>
+  <title>RoadPulse — Road Condition Map</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
   <style>
     :root {
       --bg-canvas: #121214;
@@ -16,7 +14,6 @@
       --text-primary: #f5f5f7;
       --text-secondary: #98989d;
       --stat-box-bg: rgba(255, 255, 255, 0.08);
-      --border-separator: rgba(255, 255, 255, 0.1);
       --badge-bg: rgba(255, 255, 255, 0.12);
       --badge-color: #d1d1d6;
       --status-color: #aeaeb2;
@@ -24,24 +21,6 @@
       --btn-text: #ffffff;
       --popup-bg: rgba(30, 30, 32, 0.95);
       --popup-text: #f5f5f7;
-    }
-
-    [data-theme="light"] {
-      --bg-canvas: #f2f2f7;
-      --card-bg: rgba(255, 255, 255, 0.88);
-      --card-border: rgba(0, 0, 0, 0.08);
-      --card-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-      --text-primary: #1c1c1e;
-      --text-secondary: #8e8e93;
-      --stat-box-bg: #f2f2f7;
-      --border-separator: #e5e5ea;
-      --badge-bg: #e5e5ea;
-      --badge-color: #3a3a3c;
-      --status-color: #3a3a3c;
-      --btn-primary: #007aff;
-      --btn-text: #ffffff;
-      --popup-bg: rgba(255, 255, 255, 0.95);
-      --popup-text: #1c1c1e;
     }
 
     [data-theme="dark"] .leaflet-tile-pane {
@@ -59,7 +38,7 @@
       width: 100%;
       height: 100%;
       background-color: var(--bg-canvas);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
       overflow: hidden;
     }
 
@@ -68,7 +47,7 @@
       top: 16px;
       left: 14px;
       right: 14px;
-      max-width: 400px;
+      max-width: 380px;
       margin: 0 auto;
       background: var(--card-bg);
       border: 1px solid var(--card-border);
@@ -92,32 +71,6 @@
       color: var(--text-primary);
     }
 
-    .header-actions {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .theme-toggle-btn {
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      border: 1px solid var(--card-border);
-      background: var(--stat-box-bg);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-    }
-
-    .theme-toggle-btn svg {
-      width: 14px;
-      height: 14px;
-      fill: none;
-      stroke: var(--text-primary);
-      stroke-width: 2;
-    }
-
     .badge {
       font-size: 11px;
       font-weight: 600;
@@ -130,11 +83,6 @@
     .badge.active {
       background: rgba(10, 132, 255, 0.2);
       color: #0a84ff;
-    }
-
-    .badge.recording {
-      background: rgba(255, 69, 58, 0.2);
-      color: #ff453a;
     }
 
     .btn-action {
@@ -156,15 +104,15 @@
 
     .stats-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 5px;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
       margin-top: 12px;
     }
 
     .stat-box {
       background: var(--stat-box-bg);
       border-radius: 10px;
-      padding: 8px 3px;
+      padding: 8px 4px;
       text-align: center;
     }
 
@@ -176,42 +124,36 @@
     }
 
     .stat-val {
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 700;
       color: var(--text-primary);
       margin-top: 2px;
     }
 
-    .filter-pills {
+    .hazard-badge {
       display: flex;
-      gap: 6px;
-      margin-top: 12px;
-    }
-
-    .filter-pill {
-      flex: 1;
-      padding: 6px 0;
-      font-size: 11px;
-      font-weight: 600;
-      border-radius: 8px;
-      border: 1px solid var(--card-border);
-      background: var(--stat-box-bg);
-      color: var(--text-secondary);
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      border: 2px solid #ffffff;
+      font-size: 14px;
       cursor: pointer;
-      text-align: center;
+      transition: transform 0.2s;
     }
 
-    .filter-pill.active {
-      background: var(--btn-primary);
-      color: #ffffff;
-      border-color: transparent;
+    .hazard-badge:hover {
+      transform: scale(1.15);
     }
 
-    .status-text {
-      margin-top: 10px;
-      font-size: 12px;
-      color: var(--status-color);
-      text-align: center;
+    .hazard-badge.severe {
+      background: #ff3b30;
+    }
+
+    .hazard-badge.moderate {
+      background: #ff9500;
     }
 
     .leaflet-popup-content-wrapper {
@@ -219,6 +161,7 @@
       background: var(--popup-bg) !important;
       color: var(--popup-text) !important;
       border: 1px solid var(--card-border);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35) !important;
     }
   </style>
 </head>
@@ -230,77 +173,38 @@
 
   <div class="ios-card">
     <div class="card-header">
-      <div class="title">RoadPulse Cluster View</div>
-      <div class="header-actions">
-        <button id="theme-btn" class="theme-toggle-btn" onclick="toggleTheme()" aria-label="Toggle Theme">
-          <svg id="theme-icon-moon" viewBox="0 0 24 24" style="display:none;">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-          </svg>
-          <svg id="theme-icon-sun" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="5"></circle>
-            <line x1="12" y1="1" x2="12" y2="3"></line>
-            <line x1="12" y1="21" x2="12" y2="23"></line>
-            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-            <line x1="1" y1="12" x2="3" y2="12"></line>
-            <line x1="21" y1="12" x2="23" y2="12"></line>
-            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-          </svg>
-        </button>
-        <span id="ui-badge" class="badge">VIEWER</span>
-      </div>
+      <div class="title">Road Health Live</div>
+      <span id="ui-badge" class="badge">VIEWER</span>
     </div>
 
     <button id="ui-btn" class="btn-action" onclick="toggleLogger()">
-      Start Telemetry Logging
+      Start Road Scanner
     </button>
 
     <div class="stats-grid">
       <div class="stat-box">
-        <div class="stat-label">Lat</div>
-        <div id="stat-lat" class="stat-val">--.----</div>
+        <div class="stat-label">Critical Hazards</div>
+        <div id="stat-hazards" class="stat-val" style="color: #ff453a;">0</div>
       </div>
       <div class="stat-box">
-        <div class="stat-label">Lng</div>
-        <div id="stat-lng" class="stat-val">--.----</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-label">Total</div>
-        <div id="stat-spots" class="stat-val">0</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-label">Queue</div>
-        <div id="stat-queue" class="stat-val">0</div>
+        <div class="stat-label">Road Health</div>
+        <div id="stat-health" class="stat-val" style="color: #30d158;">Good</div>
       </div>
     </div>
-
-    <div class="filter-pills">
-      <button class="filter-pill active" id="f-all" onclick="changeFilter('ALL')">All</button>
-      <button class="filter-pill" id="f-red" onclick="changeFilter('RED')">Severe</button>
-      <button class="filter-pill" id="f-orange" onclick="changeFilter('ORANGE')">Moderate</button>
-      <button class="filter-pill" id="f-yellow" onclick="changeFilter('YELLOW')">Minor</button>
-    </div>
-
-    <div id="ui-status" class="status-text">No lines. Grouped by cluster for clean view.</div>
   </div>
 
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 
   <script>
     const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxovS5SKTpxjeOnrPMhGAGIfKIqji3a4TSxt7Sf7KrI-f7Aueh3tEPk6GcuOUwV9R-T/exec";
     const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvD2getclUw9lsCQXftP9oH4vFP8Yx9cEJe91JDXxq5p0Pz05WTGUFogtAbs5fpaW8Yj8gdIMOCrk4/pub?output=csv";
     const BLYNK_TOKEN = "k53JqlD8pCz-0Z_ixoqYMSyMgkMVN-pw";
-    const QUEUE_STORAGE_KEY = "roadpulse_offline_queue";
 
-    let currentTheme = localStorage.getItem("roadpulse_theme") || "dark";
-    document.documentElement.setAttribute("data-theme", currentTheme);
-
-    const map = L.map('map', { zoomControl: false }).setView([18.35, 73.90], 11);
+    const map = L.map('map', { zoomControl: false }).setView([18.50, 73.88], 12);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -308,83 +212,96 @@
       attribution: '&copy; OpenStreetMap'
     }).addTo(map);
 
-    const markersCluster = L.markerClusterGroup({
-      maxClusterRadius: 40,
-      spiderfyOnMaxZoom: true,
-      showCoverageOnHover: false
-    });
-    map.addLayer(markersCluster);
+    let heatLayer = null;
+    const badgeLayer = L.layerGroup().addTo(map);
 
     let isLogging = false;
     let myLat = null;
     let myLng = null;
-    let smoothLat = null;
-    let smoothLng = null;
     let lastBlynkPayload = "";
     let watchId = null;
     let blynkPollTimer = null;
     let mapInitialFocus = false;
     let wakeLock = null;
-    let activeSeverityFilter = "ALL";
-    let cachedRows = [];
 
     const audioEngine = document.getElementById("bg-audio-engine");
 
-    function toggleTheme() {
-      currentTheme = currentTheme === "dark" ? "light" : "dark";
-      document.documentElement.setAttribute("data-theme", currentTheme);
-      localStorage.setItem("roadpulse_theme", currentTheme);
-      document.getElementById("theme-icon-moon").style.display = currentTheme === "dark" ? "none" : "block";
-      document.getElementById("theme-icon-sun").style.display = currentTheme === "dark" ? "block" : "none";
-      renderMarkers();
+    async function toggleLogger() {
+      if (!isLogging) {
+        isLogging = true;
+        document.getElementById("ui-btn").innerText = "Stop Scanner";
+        document.getElementById("ui-btn").classList.add("stop");
+        document.getElementById("ui-badge").className = "badge active";
+        document.getElementById("ui-badge").innerText = "SCANNING";
+
+        try {
+          if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
+        } catch (e) {}
+
+        try { audioEngine.play().catch(() => {}); } catch (e) {}
+
+        if (navigator.geolocation) {
+          watchId = navigator.geolocation.watchPosition(
+            (pos) => {
+              if (pos.coords.accuracy <= 25) {
+                myLat = pos.coords.latitude;
+                myLng = pos.coords.longitude;
+              }
+            },
+            () => {},
+            { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+          );
+        }
+        blynkPollTimer = setInterval(checkBlynk, 1100);
+      } else {
+        isLogging = false;
+        if (blynkPollTimer) clearInterval(blynkPollTimer);
+        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+        if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+        try { audioEngine.pause(); audioEngine.currentTime = 0; } catch (e) {}
+
+        document.getElementById("ui-btn").innerText = "Start Road Scanner";
+        document.getElementById("ui-btn").classList.remove("stop");
+        document.getElementById("ui-badge").className = "badge";
+        document.getElementById("ui-badge").innerText = "VIEWER";
+      }
     }
 
-    function changeFilter(val) {
-      activeSeverityFilter = val;
-      document.querySelectorAll(".filter-pill").forEach(el => el.classList.remove("active"));
-      document.getElementById("f-" + val.toLowerCase()).classList.add("active");
-      renderMarkers();
-    }
+    async function checkBlynk() {
+      if (!isLogging || myLat === null || myLng === null) return;
 
-    function getColor(s) {
-      if (s === "RED") return "#ff453a";
-      if (s === "ORANGE") return "#ff9f0a";
-      return "#ffd60a";
-    }
+      const url = `https://blr1.blynk.cloud/external/api/get?token=${BLYNK_TOKEN}&v1`;
+      try {
+        const res = await fetch(url);
+        if (!res.ok) return;
+        let raw = await res.text();
+        raw = raw.replace(/^"|"$/g, '').trim();
+        if (!raw || raw === lastBlynkPayload) return;
+        lastBlynkPayload = raw;
 
-    function renderMarkers() {
-      markersCluster.clearLayers();
-      if (!cachedRows || cachedRows.length === 0) return;
+        const parts = raw.split(",");
+        if (parts.length < 3) return;
 
-      const filtered = cachedRows.filter(p => {
-        if (activeSeverityFilter === "ALL") return true;
-        return p.severity === activeSeverityFilter;
-      });
+        await fetch(GOOGLE_SCRIPT_URL, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({
+            type: parts[0].trim(),
+            color: parts[1].trim(),
+            gforce: parseFloat(parts[2]) || 0,
+            lat: myLat,
+            lng: myLng
+          })
+        });
 
-      filtered.forEach(p => {
-        const c = getColor(p.severity);
-        const marker = L.circleMarker([p.lat, p.lng], {
-          radius: p.severity === "RED" ? 7 : p.severity === "ORANGE" ? 5 : 4,
-          fillColor: c,
-          color: "#ffffff",
-          weight: 1,
-          fillOpacity: 0.9
-        }).bindPopup(`
-          <div style="font-size:13px; line-height:1.4;">
-            <b>${p.type}</b><br/>
-            Severity: <b style="color:${c}">${p.severity}</b><br/>
-            Force: ${p.gforce.toFixed(2)} g<br/>
-            Time: ${p.time || "N/A"}
-          </div>
-        `);
-        markersCluster.addLayer(marker);
-      });
-
-      document.getElementById("stat-spots").innerText = filtered.length;
+        setTimeout(loadSheetData, 1800);
+      } catch (e) {}
     }
 
     function loadSheetData() {
       const queryUrl = CSV_URL + '&nocache=' + new Date().getTime();
+
       Papa.parse(queryUrl, {
         download: true,
         header: true,
@@ -393,15 +310,16 @@
           const rows = res.data;
           if (!rows || rows.length === 0) return;
 
-          const clean = [];
+          const heatData = [];
+          const criticalHazards = [];
+          let severeCount = 0;
+
           rows.forEach(r => {
             const keys = Object.keys(r);
             const latKey = keys.find(k => /^(lat|latitude)/i.test(k.trim()));
             const lngKey = keys.find(k => /^(lon|lng|longitude)/i.test(k.trim()));
             const gKey = keys.find(k => /(g_force|gforce|force)/i.test(k.trim()));
             const sevKey = keys.find(k => /(severity|color)/i.test(k.trim()));
-            const typeKey = keys.find(k => /type/i.test(k.trim()));
-            const timeKey = keys.find(k => /(time|timestamp|date)/i.test(k.trim()));
 
             let r1 = latKey ? parseFloat(r[latKey]) : NaN;
             let r2 = lngKey ? parseFloat(r[lngKey]) : NaN;
@@ -409,24 +327,72 @@
 
             let lat = r1 > 50.0 && r2 < 30.0 ? r2 : r1;
             let lng = r1 > 50.0 && r2 < 30.0 ? r1 : r2;
-
             if (lat < 8.0 || lat > 37.0 || lng < 68.0 || lng > 98.0) return;
 
-            clean.push({
-              lat: lat,
-              lng: lng,
-              gforce: gKey ? (parseFloat(r[gKey]) || 0) : 0,
-              severity: sevKey ? r[sevKey] : "YELLOW",
-              type: typeKey ? r[typeKey] : "POTHOLE",
-              time: timeKey ? r[timeKey] : ""
-            });
+            const force = gKey ? (parseFloat(r[gKey]) || 0) : 0;
+            const sev = (sevKey && r[sevKey]) ? r[sevKey].toUpperCase() : "YELLOW";
+
+            const intensity = sev === "RED" ? 1.0 : sev === "ORANGE" ? 0.6 : 0.25;
+            heatData.push([lat, lng, intensity]);
+
+            if (sev === "RED" || sev === "ORANGE") {
+              if (sev === "RED") severeCount++;
+              criticalHazards.push({ lat, lng, severity: sev, force });
+            }
           });
 
-          cachedRows = clean;
-          renderMarkers();
+          if (heatLayer) map.removeLayer(heatLayer);
+          heatLayer = L.heatLayer(heatData, {
+            radius: 20,
+            blur: 18,
+            maxZoom: 16,
+            max: 1.0,
+            gradient: {
+              0.2: '#ffd60a',
+              0.55: '#ff9f0a',
+              0.85: '#ff453a'
+            }
+          }).addTo(map);
 
-          if (!mapInitialFocus && clean.length > 0) {
-            const bounds = clean.map(p => [p.lat, p.lng]);
+          badgeLayer.clearLayers();
+          criticalHazards.forEach(h => {
+            const isRed = h.severity === "RED";
+            const iconHtml = `<div class="hazard-badge ${isRed ? 'severe' : 'moderate'}">⚠️</div>`;
+            const customIcon = L.divIcon({
+              className: 'custom-hazard-icon',
+              html: iconHtml,
+              iconSize: [28, 28],
+              iconAnchor: [14, 14]
+            });
+
+            L.marker([h.lat, h.lng], { icon: customIcon })
+              .bindPopup(`
+                <div style="font-size:13px; line-height:1.4;">
+                  <b style="font-size:14px; color:${isRed ? '#ff453a' : '#ff9f0a'};">
+                    ${isRed ? 'Severe Damage Zone' : 'Moderate Road Hazard'}
+                  </b><br/>
+                  Impact: <b>${h.force.toFixed(2)}G</b><br/>
+                  Action: Repair Inspection Recommended
+                </div>
+              `)
+              .addTo(badgeLayer);
+          });
+
+          document.getElementById("stat-hazards").innerText = criticalHazards.length;
+          const healthEl = document.getElementById("stat-health");
+          if (severeCount > 5) {
+            healthEl.innerText = "Poor";
+            healthEl.style.color = "#ff453a";
+          } else if (criticalHazards.length > 8) {
+            healthEl.innerText = "Degraded";
+            healthEl.style.color = "#ff9f0a";
+          } else {
+            healthEl.innerText = "Fair";
+            healthEl.style.color = "#30d158";
+          }
+
+          if (!mapInitialFocus && heatData.length > 0) {
+            const bounds = heatData.map(p => [p[0], p[1]]);
             map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
             mapInitialFocus = true;
           }
