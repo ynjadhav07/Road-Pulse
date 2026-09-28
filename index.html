@@ -3,14 +3,23 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
-  <title>RoadPulse Telemetry — Discrete Defect Map</title>
+  <title>RoadPulse Telemetry — Command Center</title>
+
+ 
+  <link rel="manifest" href="./manifest.json" />
+  <meta name="theme-color" content="#0c0c0e" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="RoadPulse" />
+  <link rel="apple-touch-icon" href="https://img.icons8.com/fluency/192/map-pin.png" />
+
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     :root {
       --bg-canvas: #0c0c0e;
-      --card-bg: rgba(24, 24, 28, 0.82);
+      --card-bg: rgba(22, 22, 26, 0.85);
       --card-border: rgba(255, 255, 255, 0.12);
-      --card-shadow: 0 14px 40px rgba(0, 0, 0, 0.65);
+      --card-shadow: 0 16px 40px rgba(0, 0, 0, 0.65);
       --text-primary: #f5f5f7;
       --text-secondary: #98989f;
       --stat-box-bg: rgba(255, 255, 255, 0.06);
@@ -32,6 +41,7 @@
       padding: 0;
       box-sizing: border-box;
       -webkit-font-smoothing: antialiased;
+      -webkit-tap-highlight-color: transparent;
     }
 
     body, html, #map {
@@ -42,10 +52,9 @@
       overflow: hidden;
     }
 
-    /* Move Leaflet controls out of the bottom bar's way */
     .leaflet-top.leaflet-right {
-      top: 14px;
-      right: 12px;
+      top: 16px;
+      right: 16px;
     }
     .leaflet-bar {
       border: 1px solid var(--card-border) !important;
@@ -60,63 +69,123 @@
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
     }
+    .leaflet-bar a:hover {
+      background: rgba(255, 255, 255, 0.15) !important;
+      color: #fff !important;
+    }
 
-    /* Compact Top Island */
-    .top-island {
+    /* HUD Control for us */
+    .telemetry-hud {
       position: absolute;
-      top: 12px;
-      left: 12px;
-      right: 60px; /* Leaves room for zoom buttons on the right */
-      max-width: 380px;
+      top: 14px;
+      left: 14px;
       background: var(--card-bg);
       border: 1px solid var(--card-border);
-      border-radius: 22px;
       box-shadow: var(--card-shadow);
       z-index: 1000;
       backdrop-filter: blur(24px);
       -webkit-backdrop-filter: blur(24px);
-      overflow: hidden;
       transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
-    .island-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 8px 12px;
-      cursor: pointer;
+    @media (max-width: 767px) {
+      .telemetry-hud {
+        right: 64px;
+        max-width: 380px;
+        border-radius: 22px;
+        overflow: hidden;
+      }
+      .hud-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 12px;
+        cursor: pointer;
+      }
+      .hud-tray {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.25s ease, padding 0.25s ease;
+        padding: 0 10px;
+      }
+      .telemetry-hud.expanded .hud-tray {
+        max-height: 75px;
+        padding: 4px 10px 10px 10px;
+      }
+      .filter-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        padding-top: 8px;
+      }
     }
 
-    .island-left {
+    @media (min-width: 768px) {
+      .telemetry-hud {
+        width: 330px;
+        border-radius: 18px;
+        padding: 16px;
+        overflow: visible;
+      }
+      .hud-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: default;
+      }
+      .hud-tray {
+        max-height: none !important;
+        padding: 0 !important;
+        margin-top: 14px;
+      }
+      .filter-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        padding-top: 12px;
+      }
+      .pc-subtext {
+        display: block !important;
+        font-size: 11px;
+        color: var(--text-secondary);
+        margin-top: 10px;
+        line-height: 1.4;
+      }
+    }
+
+    .hud-left {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 9px;
     }
 
     .status-dot {
-      width: 8px;
-      height: 8px;
+      width: 9px;
+      height: 9px;
       border-radius: 50%;
       background: #30d158;
       box-shadow: 0 0 8px #30d158;
+      transition: background 0.2s, box-shadow 0.2s;
     }
     .status-dot.tracking {
       background: #0a84ff;
-      box-shadow: 0 0 8px #0a84ff;
+      box-shadow: 0 0 10px #0a84ff;
     }
     .status-dot.recording {
       background: #ff453a;
-      box-shadow: 0 0 10px #ff453a;
+      box-shadow: 0 0 12px #ff453a;
     }
 
-    .island-title {
-      font-size: 13px;
+    .hud-title {
+      font-size: 14px;
       font-weight: 700;
       color: var(--text-primary);
       letter-spacing: -0.2px;
     }
 
-    .island-count {
+    .hud-count {
       font-size: 11px;
       font-weight: 600;
       color: var(--text-secondary);
@@ -125,8 +194,8 @@
       border-radius: 8px;
     }
 
-    .island-btn {
-      padding: 6px 12px;
+    .hud-btn {
+      padding: 7px 14px;
       font-size: 12px;
       font-weight: 600;
       border: none;
@@ -134,40 +203,21 @@
       background: var(--btn-primary);
       color: var(--btn-text);
       cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 4px;
+      transition: opacity 0.2s, background-color 0.2s, transform 0.1s;
     }
-    .island-btn.stop {
+    .hud-btn:hover {
+      opacity: 0.92;
+      transform: translateY(-1px);
+    }
+    .hud-btn.stop {
       background: #ff3b30;
-    }
-
-    /* Expandable Filter Tray */
-    .island-tray {
-      max-height: 0;
-      overflow: hidden;
-      transition: max-height 0.25s ease, padding 0.25s ease;
-      padding: 0 10px;
-    }
-
-    .top-island.expanded .island-tray {
-      max-height: 70px;
-      padding: 4px 10px 10px 10px;
-    }
-
-    .filter-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 6px;
-      border-top: 1px solid rgba(255, 255, 255, 0.08);
-      padding-top: 8px;
     }
 
     .filter-pill {
       background: var(--stat-box-bg);
       border: 1px solid var(--card-border);
       border-radius: 10px;
-      padding: 4px 0;
+      padding: 6px 0;
       text-align: center;
       cursor: pointer;
       color: var(--text-secondary);
@@ -180,41 +230,66 @@
       font-weight: 700;
       display: block;
       color: var(--text-primary);
+      margin-top: 1px;
+    }
+    .filter-pill:hover {
+      border-color: rgba(255, 255, 255, 0.3);
+      color: #fff;
     }
     .filter-pill.active {
       background: rgba(255, 255, 255, 0.18);
-      border-color: rgba(255, 255, 255, 0.4);
+      border-color: rgba(255, 255, 255, 0.45);
     }
     .filter-pill.f-red.active { border-color: var(--severe-color); background: rgba(255, 69, 58, 0.2); }
     .filter-pill.f-orange.active { border-color: var(--moderate-color); background: rgba(255, 159, 10, 0.2); }
     .filter-pill.f-yellow.active { border-color: var(--minor-color); background: rgba(255, 214, 10, 0.2); }
 
-    /* Modern Floating Bottom Inspector Card */
+    .pc-subtext {
+      display: none;
+    }
+
+    /* Inspector Card */
     .inspector-card {
       position: absolute;
-      bottom: 24px;
-      left: 14px;
-      right: 14px;
-      max-width: 390px;
-      margin: 0 auto;
       background: var(--card-bg);
       border: 1px solid var(--card-border);
-      border-radius: 20px;
-      padding: 14px 16px;
       box-shadow: var(--card-shadow);
       z-index: 1000;
       backdrop-filter: blur(28px);
       -webkit-backdrop-filter: blur(28px);
       display: none;
-      transform: translateY(12px);
       opacity: 0;
       transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     .inspector-card.visible {
       display: block;
-      transform: translateY(0);
+      transform: translateY(0) !important;
       opacity: 1;
+    }
+
+    @media (max-width: 767px) {
+      .inspector-card {
+        bottom: 24px;
+        left: 14px;
+        right: 14px;
+        max-width: 390px;
+        margin: 0 auto;
+        border-radius: 20px;
+        padding: 14px 16px;
+        transform: translateY(14px);
+      }
+    }
+
+    @media (min-width: 768px) {
+      .inspector-card {
+        bottom: 24px;
+        right: 24px;
+        width: 320px;
+        border-radius: 18px;
+        padding: 16px;
+        transform: translateY(12px);
+      }
     }
 
     .ins-top {
@@ -227,7 +302,7 @@
     .ins-heading {
       display: flex;
       align-items: center;
-      gap: 7px;
+      gap: 8px;
       font-size: 14px;
       font-weight: 700;
       color: var(--text-primary);
@@ -254,6 +329,11 @@
       color: var(--text-secondary);
       font-size: 14px;
       cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+    .close-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+      color: #fff;
     }
 
     .ins-metrics {
@@ -299,21 +379,21 @@
     <source src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA" type="audio/wav">
   </audio>
 
-  <!-- Compact Dynamic Island Header -->
-  <div id="top-island" class="top-island">
-    <div class="island-header" onclick="toggleIslandExpand()">
-      <div class="island-left">
+  <!-- Responsive HUD -->
+  <div id="telemetry-hud" class="telemetry-hud">
+    <div class="hud-header" onclick="handleHudHeaderClick()">
+      <div class="hud-left">
         <div id="status-dot" class="status-dot"></div>
-        <div class="island-title">RoadPulse</div>
-        <div class="island-count" id="count-all">0</div>
+        <div class="hud-title">RoadPulse</div>
+        <div class="hud-count" id="count-all">0</div>
       </div>
-      <button id="ui-btn" class="island-btn" onclick="event.stopPropagation(); toggleLogger();">
+      <button id="ui-btn" class="hud-btn" onclick="event.stopPropagation(); toggleLogger();">
         Start
       </button>
     </div>
 
-    <!-- Collapsible Tray -->
-    <div class="island-tray">
+    <!-- Filter Tray -->
+    <div class="hud-tray">
       <div class="filter-grid">
         <div class="filter-pill active" id="filter-all" onclick="applyFilter('ALL')">
           <span>All</span>
@@ -332,10 +412,13 @@
           <span class="num" id="count-yellow">0</span>
         </div>
       </div>
+      <div class="pc-subtext">
+        Auto Snap-to-Road active. Click any marker to inspect peak G-force vector.
+      </div>
     </div>
   </div>
 
-  <!-- Modern Floating Inspector Card -->
+  <!-- Responsive Floating Inspector Card -->
   <div id="inspector-card" class="inspector-card">
     <div class="ins-top">
       <div class="ins-heading">
@@ -347,11 +430,11 @@
     </div>
     <div class="ins-metrics">
       <div class="metric-card">
-        <div class="metric-label">Peak G-Force</div>
+        <div class="metric-label">Peak Impact</div>
         <div class="metric-value" id="ins-force">-- <span>G</span></div>
       </div>
       <div class="metric-card">
-        <div class="metric-label">Detected Time</div>
+        <div class="metric-label">Detected At</div>
         <div class="metric-value" id="ins-time" style="font-size: 13px;">--</div>
       </div>
     </div>
@@ -392,8 +475,10 @@
 
     const audioEngine = document.getElementById("bg-audio-engine");
 
-    function toggleIslandExpand() {
-      document.getElementById("top-island").classList.toggle("expanded");
+    function handleHudHeaderClick() {
+      if (window.innerWidth < 768) {
+        document.getElementById("telemetry-hud").classList.toggle("expanded");
+      }
     }
 
     function applyFilter(sev) {
@@ -407,7 +492,7 @@
       if (!raw) return "Just now";
       const parts = raw.split(" ");
       if (parts.length >= 2) {
-        return parts[1].substring(0, 5); // Returns HH:MM
+        return parts[1].substring(0, 5);
       }
       return raw;
     }
@@ -435,6 +520,15 @@
     function closeInspector() {
       document.getElementById("inspector-card").classList.remove("visible");
     }
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        closeInspector();
+      } else if (e.code === "Space" && e.target === document.body) {
+        e.preventDefault();
+        toggleLogger();
+      }
+    });
 
     async function snapPointToRoad(lat, lng) {
       const cacheKey = `${lat.toFixed(4)}_${lng.toFixed(4)}`;
@@ -663,6 +757,20 @@
 
     loadSheetData();
     setInterval(loadSheetData, 5000);
+  </script>
+
+  <!-- Service Worker registration with relative scope for GitHub Pages subfolder -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      const swCode = `
+        self.addEventListener('install', e => self.skipWaiting());
+        self.addEventListener('activate', e => clients.claim());
+        self.addEventListener('fetch', e => e.respondWith(fetch(e.request)));
+      `;
+      const blob = new Blob([swCode], { type: 'application/javascript' });
+      const swUrl = URL.createObjectURL(blob);
+      navigator.serviceWorker.register(swUrl, { scope: './' }).catch(() => {});
+    }
   </script>
 </body>
 </html>
