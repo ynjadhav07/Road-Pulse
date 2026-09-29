@@ -110,7 +110,7 @@
         padding: 0 10px;
       }
       .telemetry-hud.expanded .hud-tray {
-        max-height: 75px;
+        max-height: 95px;
         padding: 4px 10px 10px 10px;
       }
       .filter-grid {
@@ -147,13 +147,6 @@
         border-top: 1px solid rgba(255, 255, 255, 0.08);
         padding-top: 12px;
       }
-      .pc-subtext {
-        display: block !important;
-        font-size: 11px;
-        color: var(--text-secondary);
-        margin-top: 10px;
-        line-height: 1.4;
-      }
     }
 
     .hud-left {
@@ -169,6 +162,10 @@
       background: #30d158;
       box-shadow: 0 0 8px #30d158;
       transition: background 0.2s, box-shadow 0.2s;
+    }
+    .status-dot.searching {
+      background: #ffd60a;
+      box-shadow: 0 0 10px #ffd60a;
     }
     .status-dot.tracking {
       background: #0a84ff;
@@ -237,8 +234,22 @@
     .filter-pill.f-orange.active { border-color: var(--moderate-color); background: rgba(255, 159, 10, 0.2); }
     .filter-pill.f-yellow.active { border-color: var(--minor-color); background: rgba(255, 214, 10, 0.2); }
 
-    .pc-subtext {
-      display: none;
+    /* Single-line Live Telemetry Ticker */
+    .live-event-ticker {
+      margin-top: 6px;
+      padding-top: 5px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      letter-spacing: -0.1px;
+    }
+    .ticker-highlight {
+      font-weight: 700;
+      color: var(--text-primary);
     }
 
     /* Inspector Card */
@@ -400,8 +411,11 @@
           <span class="num" id="count-yellow">0</span>
         </div>
       </div>
-      <div class="pc-subtext">
-        Auto Snap-to-Road active. Click any marker to inspect peak G-force vector.
+
+      <!-- Live Event Ticker -->
+      <div class="live-event-ticker">
+        <span id="ticker-status">Ready</span>
+        <span id="ticker-detail" class="ticker-highlight">Waiting for bumps...</span>
       </div>
     </div>
   </div>
@@ -666,12 +680,16 @@
     async function toggleLogger() {
       const dot = document.getElementById("status-dot");
       const btn = document.getElementById("ui-btn");
+      const statusLabel = document.getElementById("ticker-status");
+      const detailLabel = document.getElementById("ticker-detail");
 
       if (!isLogging) {
         isLogging = true;
         btn.innerText = "Stop";
         btn.classList.add("stop");
-        dot.className = "status-dot tracking";
+        dot.className = "status-dot searching";
+        statusLabel.innerText = "GPS Search";
+        detailLabel.innerText = "Acquiring satellite lock...";
 
         try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
         try { audioEngine.play().catch(() => {}); } catch (e) {}
@@ -679,13 +697,21 @@
         if (navigator.geolocation) {
           watchId = navigator.geolocation.watchPosition(
             (pos) => {
-              // STRICT ACCURACY GUARD: Discard any cellular mast/Wi-Fi drift > 20 meters
               if (pos.coords.accuracy <= 20) {
                 myLat = pos.coords.latitude;
                 myLng = pos.coords.longitude;
+                dot.className = "status-dot tracking";
+                statusLabel.innerText = "Active";
+                detailLabel.innerText = `GPS Locked (±${Math.round(pos.coords.accuracy)}m)`;
+              } else {
+                statusLabel.innerText = "Low Accuracy";
+                detailLabel.innerText = `±${Math.round(pos.coords.accuracy)}m (Need ≤20m)`;
               }
             },
-            () => {},
+            (err) => {
+              statusLabel.innerText = "GPS Error";
+              detailLabel.innerText = err.message;
+            },
             { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
           );
         }
@@ -700,6 +726,8 @@
         btn.innerText = "Start";
         btn.classList.remove("stop");
         dot.className = "status-dot";
+        statusLabel.innerText = "Ready";
+        detailLabel.innerText = "Waiting for bumps...";
       }
     }
 
@@ -719,24 +747,43 @@
         const parts = raw.split(",");
         if (parts.length < 3) return;
 
+        const eventType = parts[0].trim();
+        const eventColor = parts[1].trim();
+        const eventGforce = parseFloat(parts[2]) || 0;
+
         const dot = document.getElementById("status-dot");
+        const statusLabel = document.getElementById("ticker-status");
+        const detailLabel = document.getElementById("ticker-detail");
+
+        // Flash recording state with type and magnitude
         dot.className = "status-dot recording";
+        statusLabel.innerText = "Logging Event";
+        detailLabel.innerHTML = `<span style="color:${eventColor.toLowerCase() === 'red' ? '#ff453a' : eventColor.toLowerCase() === 'orange' ? '#ff9f0a' : '#ffd60a'}">${eventType}</span> · ${eventGforce.toFixed(2)} G`;
 
         await fetch(GOOGLE_SCRIPT_URL, {
           method: "POST",
           mode: "no-cors",
           headers: { "Content-Type": "text/plain;charset=utf-8" },
           body: JSON.stringify({
-            type: parts[0].trim(),
-            color: parts[1].trim(),
-            gforce: parseFloat(parts[2]) || 0,
+            type: eventType,
+            color: eventColor,
+            gforce: eventGforce,
             lat: myLat,
             lng: myLng
           })
         });
 
         setTimeout(() => {
-          if (isLogging) dot.className = "status-dot tracking";
+          if (isLogging) {
+            dot.className = "status-dot tracking";
+            statusLabel.innerText = "Logged";
+            setTimeout(() => {
+              if (isLogging) {
+                statusLabel.innerText = "Active";
+                detailLabel.innerText = "Monitoring road...";
+              }
+            }, 3000);
+          }
           loadSheetData();
         }, 1800);
       } catch (e) {}
