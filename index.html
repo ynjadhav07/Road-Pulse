@@ -5,9 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
   <title>RoadPulse Telemetry — Command Center</title>
 
- 
+  <!-- PWA & Native App Meta Tags -->
   <link rel="manifest" href="./manifest.json" />
   <meta name="theme-color" content="#0c0c0e" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="RoadPulse" />
@@ -17,7 +18,7 @@
   <style>
     :root {
       --bg-canvas: #0c0c0e;
-      --card-bg: rgba(22, 22, 26, 0.85);
+      --card-bg: rgba(22, 22, 26, 0.88);
       --card-border: rgba(255, 255, 255, 0.12);
       --card-shadow: 0 16px 40px rgba(0, 0, 0, 0.65);
       --text-primary: #f5f5f7;
@@ -74,7 +75,7 @@
       color: #fff !important;
     }
 
-    /* HUD Control for us */
+    /* HUD Controls */
     .telemetry-hud {
       position: absolute;
       top: 14px;
@@ -109,7 +110,7 @@
         padding: 0 10px;
       }
       .telemetry-hud.expanded .hud-tray {
-        max-height: 75px;
+        max-height: 95px;
         padding: 4px 10px 10px 10px;
       }
       .filter-grid {
@@ -168,6 +169,10 @@
       background: #30d158;
       box-shadow: 0 0 8px #30d158;
       transition: background 0.2s, box-shadow 0.2s;
+    }
+    .status-dot.searching {
+      background: #ffd60a;
+      box-shadow: 0 0 10px #ffd60a;
     }
     .status-dot.tracking {
       background: #0a84ff;
@@ -243,6 +248,14 @@
     .filter-pill.f-red.active { border-color: var(--severe-color); background: rgba(255, 69, 58, 0.2); }
     .filter-pill.f-orange.active { border-color: var(--moderate-color); background: rgba(255, 159, 10, 0.2); }
     .filter-pill.f-yellow.active { border-color: var(--minor-color); background: rgba(255, 214, 10, 0.2); }
+
+    .gps-telemetry-status {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-top: 6px;
+      text-align: center;
+    }
 
     .pc-subtext {
       display: none;
@@ -329,11 +342,6 @@
       color: var(--text-secondary);
       font-size: 14px;
       cursor: pointer;
-      transition: background 0.2s, color 0.2s;
-    }
-    .close-btn:hover {
-      background: rgba(255, 255, 255, 0.2);
-      color: #fff;
     }
 
     .ins-metrics {
@@ -412,13 +420,16 @@
           <span class="num" id="count-yellow">0</span>
         </div>
       </div>
+      <div id="gps-status-indicator" class="gps-telemetry-status">
+        GPS: Idle
+      </div>
       <div class="pc-subtext">
         Auto Snap-to-Road active. Click any marker to inspect peak G-force vector.
       </div>
     </div>
   </div>
 
-  <!-- Responsive Floating Inspector Card -->
+  <!-- Inspector Card -->
   <div id="inspector-card" class="inspector-card">
     <div class="ins-top">
       <div class="ins-heading">
@@ -463,6 +474,7 @@
     let isLogging = false;
     let myLat = null;
     let myLng = null;
+    let myAccuracy = null;
     let lastBlynkPayload = "";
     let watchId = null;
     let blynkPollTimer = null;
@@ -522,9 +534,8 @@
     }
 
     window.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
-        closeInspector();
-      } else if (e.code === "Space" && e.target === document.body) {
+      if (e.key === "Escape") closeInspector();
+      else if (e.code === "Space" && e.target === document.body) {
         e.preventDefault();
         toggleLogger();
       }
@@ -532,9 +543,7 @@
 
     async function snapPointToRoad(lat, lng) {
       const cacheKey = `${lat.toFixed(4)}_${lng.toFixed(4)}`;
-      if (snappedCache.has(cacheKey)) {
-        return snappedCache.get(cacheKey);
-      }
+      if (snappedCache.has(cacheKey)) return snappedCache.get(cacheKey);
 
       try {
         const res = await fetch(`https://router.project-osrm.org/nearest/v1/driving/${lng},${lat}?number=1`);
@@ -681,12 +690,15 @@
     async function toggleLogger() {
       const dot = document.getElementById("status-dot");
       const btn = document.getElementById("ui-btn");
+      const gpsLabel = document.getElementById("gps-status-indicator");
 
       if (!isLogging) {
         isLogging = true;
         btn.innerText = "Stop";
         btn.classList.add("stop");
-        dot.className = "status-dot tracking";
+        dot.className = "status-dot searching";
+        gpsLabel.innerText = "GPS: Acquiring satellite lock...";
+        console.log("Telemetry logger started. Requesting location...");
 
         try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
         try { audioEngine.play().catch(() => {}); } catch (e) {}
@@ -694,14 +706,26 @@
         if (navigator.geolocation) {
           watchId = navigator.geolocation.watchPosition(
             (pos) => {
-              if (pos.coords.accuracy <= 20) {
+              const acc = Math.round(pos.coords.accuracy);
+              myAccuracy = acc;
+
+              // ADAPTIVE FIX: Accept initial location fix (<= 100m), then tighten to best accuracy
+              if (myLat === null || acc <= 35 || acc < (myAccuracy || 100)) {
                 myLat = pos.coords.latitude;
                 myLng = pos.coords.longitude;
+                dot.className = "status-dot tracking";
+                gpsLabel.innerText = `GPS: Locked (±${acc}m)`;
+                console.log(`GPS Position Active: ${myLat}, ${myLng} (±${acc}m)`);
               }
             },
-            () => {},
-            { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+            (err) => {
+              console.error("Geolocation Watch Error:", err.code, err.message);
+              gpsLabel.innerText = `GPS Error: ${err.message}`;
+            },
+            { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
           );
+        } else {
+          gpsLabel.innerText = "GPS: Not supported by browser";
         }
         blynkPollTimer = setInterval(checkBlynk, 1100);
       } else {
@@ -714,19 +738,33 @@
         btn.innerText = "Start";
         btn.classList.remove("stop");
         dot.className = "status-dot";
+        gpsLabel.innerText = "GPS: Idle";
+        console.log("Telemetry logger stopped.");
       }
     }
 
     async function checkBlynk() {
-      if (!isLogging || myLat === null || myLng === null) return;
+      if (!isLogging) return;
+
+      const gpsLabel = document.getElementById("gps-status-indicator");
+      if (myLat === null || myLng === null) {
+        console.warn("Telemetry waiting for valid GPS lock before posting...");
+        return;
+      }
 
       const url = `https://blr1.blynk.cloud/external/api/get?token=${BLYNK_TOKEN}&v1`;
       try {
         const res = await fetch(url);
-        if (!res.ok) return;
+        if (!res.ok) {
+          console.error("Blynk HTTP error:", res.status);
+          return;
+        }
         let raw = await res.text();
         raw = raw.replace(/^"|"$/g, '').trim();
+
         if (!raw || raw === lastBlynkPayload) return;
+
+        console.log("New sensor event from Blynk:", raw);
         lastBlynkPayload = raw;
 
         const parts = raw.split(",");
@@ -734,32 +772,44 @@
 
         const dot = document.getElementById("status-dot");
         dot.className = "status-dot recording";
+        gpsLabel.innerText = `Logging to Sheets (${parts[0]})...`;
+
+        const payload = {
+          type: parts[0].trim(),
+          color: parts[1].trim(),
+          gforce: parseFloat(parts[2]) || 0,
+          lat: myLat,
+          lng: myLng
+        };
+
+        console.log("Dispatching to Google Apps Script:", payload);
 
         await fetch(GOOGLE_SCRIPT_URL, {
           method: "POST",
           mode: "no-cors",
           headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify({
-            type: parts[0].trim(),
-            color: parts[1].trim(),
-            gforce: parseFloat(parts[2]) || 0,
-            lat: myLat,
-            lng: myLng
-          })
+          body: JSON.stringify(payload)
         });
 
+        console.log("Successfully posted row to Google Sheets pipeline.");
+
         setTimeout(() => {
-          if (isLogging) dot.className = "status-dot tracking";
+          if (isLogging) {
+            dot.className = "status-dot tracking";
+            gpsLabel.innerText = `GPS: Locked (±${myAccuracy || 0}m)`;
+          }
           loadSheetData();
         }, 1800);
-      } catch (e) {}
+      } catch (e) {
+        console.error("Pipeline failure:", e);
+      }
     }
 
     loadSheetData();
     setInterval(loadSheetData, 5000);
   </script>
 
-  <!-- Service Worker registration with relative scope for GitHub Pages subfolder -->
+  <!-- Service Worker registration with explicit scope -->
   <script>
     if ('serviceWorker' in navigator) {
       const swCode = `
